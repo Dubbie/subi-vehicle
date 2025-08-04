@@ -15,7 +15,7 @@ size = Vector3(1.8, 1, 4.2)
 [sub_resource type="BoxMesh" id="BoxMesh_6w078"]
 size = Vector3(1.8, 1, 4.2)
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "powered_wheels")]
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
 Weight = 1260.0
@@ -25,6 +25,7 @@ RPMLimit = 7200.0
 DeadRPM = 400.0
 RevSpeed = 15000.0
 EngineDrag = 0.8
+powered_wheels = [NodePath("Wheels/WheelRL"), NodePath("Wheels/WheelRR")]
 
 [node name="Components" type="Node" parent="."]
 

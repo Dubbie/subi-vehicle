@@ -33,6 +33,7 @@ extends RayCast3D
 @export var suspension_damping: float = 3000.0 # Damping force in Ns/m
 @export var suspension_rebound_damping: float = 3500.0 # Damping during extension
 @export var suspension_max_travel: float = 0.3 # Max travel distance in meters
+@export var suspension_rest_length: float = 0.0
 
 @export_group("Brakes")
 @export var brake_torque: float = 4000.0 # Max braking torque in Newton-meters (Nm)
@@ -55,210 +56,230 @@ extends RayCast3D
 @export var geometry_incline_free_zone: float = 0.2
 # The strength of the incline stiffness effect.
 @export var geometry_incline_impact_factor: float = 1.5
+
+@export var incline_area: float = 0.2
+
+@export var a_geometry_3: float = 0.0
+@export var a_geometry_4: float = 0.0
 #endregion
+
+var dist = 0.0
+var w_size = 1.0
+var w_size_read = 1.0
+var w_weight_read = 0.0
+var w_weight = 0.0
+var wv = 0.0
+var wv_ds = 0.0
+var wv_diff = 0.0
+var c_tp = 0.0
+var effectiveness = 0.0
+
+var angle = 0.0
+var snap = 0.0
+var absolute_wv = 0.0
+var absolute_wv_brake = 0.0
+var absolute_wv_diff = 0.0
+var output_wv = 0.0
+var offset = 0.0
+var c_p = 0.0
+var wheelpower = 0.0
+var wheelpower_global = 0.0
+var stress = 0.0
+var rolldist = 0.0
+var rd = 0.0
+var c_camber = 0.0
+var cambered = 0.0
+
+var rollvol = 0.0
+var sl = 0.0
+var skvol = 0.0
+var skvol_d = 0.0
+var velocity = Vector3(0, 0, 0)
+var velocity2 = Vector3(0, 0, 0)
+var compress = 0.0
+var compensate = 0.0
+var axle_position = 0.0
+
+var heat_rate = 1.0
+var wear_rate = 1.0
+
+var ground_bump = 0.0
+var ground_bump_up = false
+var ground_bump_frequency = 0.0
+var ground_bump_frequency_random = 1.0
+var ground_bump_height = 0.0
+
+var ground_friction = 1.0
+var ground_stiffness = 1.0
+var fore_friction = 0.0
+var fore_stiffness = 0.0
+var drag = 0.0
+var ground_builduprate = 0.0
+var ground_dirt = false
+var hitposition = Vector3(0, 0, 0)
+
+var cache_tyrestiffness = 0.0
+var cache_friction_action = 0.0
+
+var directional_force = Vector3(0, 0, 0)
+var slip_perc = Vector2(0, 0)
+var slip_perc2 = 0.0
+var slip_percpre = 0.0
+
+var velocity_last = Vector3(0, 0, 0)
+var velocity2_last = Vector3(0, 0, 0)
 
 # --- Node References ---
 @onready var car: VehicleBody = get_owner()
 @onready var camber_node: Marker3D = $Animation/Camber
 @onready var wheel_marker: Marker3D = $Animation/Camber/Wheel # A direct reference to the visual mesh
 
-# --- Internal State Variables ---
-var wheel_radius: float = 0.3
-var wheel_angular_velocity: float = 0.0
-var suspension_force: float = 0.0
-var last_suspension_compression: float = 0.0
-var hit_position: Vector3 = Vector3.ZERO
-var dynamic_camber_degrees: float = 0.0
-var axle_y_position: float = 0.0
+@onready var animation_node: Marker3D = $Animation
+@onready var geometry_node: Marker3D = $Geometry
+@onready var velocity_node: Marker3D = $Velocity
+@onready var velocity_step_node: Marker3D = $Velocity/Step
+@onready var velocity_2_node: Marker3D = $Velocity2
+@onready var velocity_2_step_node: Marker3D = $Velocity2/Step
 
-func _ready():
-	var sidewall_height_mm = tyre_width_mm * (tyre_aspect_ratio / 100.0)
-	var rim_diameter_mm = rim_diameter_inches * 25.4
-	var total_diameter_mm = (sidewall_height_mm * 2.0) + rim_diameter_mm
-	wheel_radius = total_diameter_mm / 2000.0
+func _ready() -> void:
+	c_tp = tyre_pressure_psi
 
-	target_position.y = - (wheel_radius + suspension_max_travel)
+	w_size = _calculate_wheel_size()
 	add_exception(car)
 
+func power() -> void:
+	pass
 
-func _physics_process(delta: float):
-	force_raycast_update()
+func diffs() -> void:
+	pass
+
+func sway() -> void:
+	pass
+
+func _physics_process(delta: float) -> void:
+	var translation = position
+	var cast_to = target_position
+	var global_translation = global_position
+	var last_translation = position
+
+	# Rotate the wheel, then reset translation
+	translation = last_translation
+
+	c_camber = camber_degrees + caster_degrees * rotation.y * float(translation.x > 0.0) - caster_degrees * rotation.y * float(translation.x < 0.0)
+
+	directional_force = Vector3.ZERO
+
+	$Velocity.position = Vector3.ZERO
+	$Velocity2.global_position = geometry_node.global_position
+
+	velocity_step_node.global_position = velocity_last
+	velocity_2_step_node.global_position = velocity2_last
+	velocity_last = velocity_node.global_position
+	velocity2_last = velocity_2_node.global_position
+
+	velocity = - velocity_step_node.position / delta
+	velocity2 = - velocity_2_step_node.position / delta
+
+	velocity_node.rotation = Vector3.ZERO
+	velocity_2_node.rotation = Vector3.ZERO
+
+	# Variables
+	var elasticity = suspension_stiffness
+	var damping = suspension_damping
+	var damping_rebound = suspension_rebound_damping
+
+	# Swaybar setup, modify suspension values based on it later
+
+	if elasticity < 0.0:
+		elasticity = 0.0
+
+	if damping < 0.0:
+		damping = 0.0
+
+	if damping_rebound < 0.0:
+		damping_rebound = 0.0
 
 	if is_colliding():
-		hit_position = get_collision_point()
-		_update_visuals_and_geometry(delta, true)
+		var suspforce = _calculate_suspension(elasticity, damping, damping_rebound, velocity.y, abs(cast_to.y), global_translation, get_collision_point())
+		compress = suspforce
 
-		suspension_force = _calculate_suspension_force(delta)
-		car.apply_force(global_transform.basis.y * suspension_force, position)
-
-		# --- Brake Torque Application ---
-		# This part remains simple for now. We will integrate engine torque later.
-		var brake_application = (car.brakeline * brake_bias) + (car.pedal_controller.get_handbrake() * handbrake_bias)
-		var brake_force = brake_torque * clamp(brake_application, 0.0, 1.0)
-		var wheel_inertia = 0.5 * pow(wheel_radius, 2) * wheel_mass_kg
-		if wheel_inertia > 0:
-			var angular_acceleration = - brake_force / wheel_inertia
-			wheel_angular_velocity += angular_acceleration * delta
-
-		# --- NEW: Call the dedicated friction function ---
-		_calculate_and_apply_friction_forces(delta, suspension_force)
-
+	# Force
+	if is_colliding():
+		hitposition = get_collision_point()
+		directional_force.y = _calculate_suspension(elasticity, damping, damping_rebound, velocity.y, abs(cast_to.y), global_translation, get_collision_point())
 	else:
-		_update_visuals_and_geometry(delta, false)
+		geometry_node.position = cast_to
 
-func _calculate_suspension_force(delta: float) -> float:
-	if not is_colliding() or delta == 0:
-		last_suspension_compression = 0.0
-		return 0.0
+	geometry_node.position.y += w_size
 
-	var ray_length = global_position.distance_to(hit_position)
-	var local_ground_vel = global_transform.basis.transposed() * (car.linear_velocity + car.angular_velocity.cross(position))
+	var inned = (abs(cambered) + a_geometry_4) / 90.0
 
-	# --- Incline Calculation (Translated from original) ---
-	var car_up_vector = global_transform.basis.y
-	var surface_normal = get_collision_normal()
-	var incline_factor = (surface_normal - car_up_vector).length()
+	inned *= inned - a_geometry_4 / 90.0
 
-	if geometry_incline_free_zone < 1.0:
-		incline_factor = (incline_factor - geometry_incline_free_zone) / (1.0 - geometry_incline_free_zone)
+	geometry_node.position.x = - inned * translation.x
 
-	incline_factor = clamp(incline_factor * geometry_incline_impact_factor, 0.0, 1.0)
+	camber_node.rotation.z = - (deg_to_rad(-c_camber * float(translation.x < 0.0) + c_camber * float(translation.x > 0.0)) - deg_to_rad(-cambered * float(translation.x < 0.0) + cambered * float(translation.x > 0.0)) * geometry_camber_gain_factor)
 
-	# --- Compression and Bottom-Out (Translated from original) ---
-	var full_travel_dist = wheel_radius + suspension_max_travel
-	var compressed_dist = full_travel_dist - ray_length
-	var bottom_out_dist = compressed_dist - suspension_max_travel
+	var g
 
-	if compressed_dist < 0: compressed_dist = 0.0
-	if bottom_out_dist < 0: bottom_out_dist = 0.0
+	axle_position = geometry_node.position.y
 
-	# --- Dynamic Stiffness/Damping (Translated from original) ---
-	# On steep inclines, the spring and damper get much stiffer to support the car's weight.
-	var bottom_out_stiffness = car.mass * 20.0 # A very high value
-	var effective_stiffness = lerp(suspension_stiffness, bottom_out_stiffness, incline_factor)
+	g = (geometry_node.position.y + (abs(cast_to.y) - geometry_horizontal_tuck)) / (abs(translation.x) + a_geometry_3 + 1.0)
+	g /= abs(g) + 1.0
+	cambered = (g * 90.0) - a_geometry_4
 
-	var damping_to_use = suspension_rebound_damping if local_ground_vel.y > 0 else suspension_damping
-	var effective_damping = lerp(damping_to_use, car.mass * 2.0, incline_factor)
+	animation_node.position = geometry_node.position
 
-	# --- Final Force Calculation (Translated from original) ---
-	var spring_force = compressed_dist * effective_stiffness
-	var damping_force = local_ground_vel.y * effective_damping
+	car.apply_force((velocity_2_node.global_transform.basis.orthonormalized() * Vector3.UP) * directional_force.y, hitposition - car.global_transform.origin)
 
-	var final_force = spring_force - damping_force
+func align_axis_to_vector(xform: Transform3D, norm: Vector3) -> Transform3D:
+	if norm == Vector3.ZERO: return xform # Safety check
 
-	# Add extra bottom-out force if suspension travel is exceeded.
-	if bottom_out_dist > 0:
-		final_force += bottom_out_dist * (bottom_out_stiffness * 2.0)
-		final_force -= local_ground_vel.y * (car.mass * 2.0)
-
-	if final_force < 0:
-		final_force = 0.0
-
-	# Store the current compression for the next frame's damping calculation.
-	last_suspension_compression = compressed_dist
-
-	return final_force
+	xform.basis.y = norm
+	# Rebuild the X and Z axes to be perpendicular to the new Y-axis (the normal)
+	# and to each other. This is a robust way to prevent the matrix from becoming invalid.
+	xform.basis.x = xform.basis.z.cross(norm).normalized()
+	xform.basis.z = xform.basis.x.cross(norm).normalized()
+	return xform
 
 
-func _update_visuals_and_geometry(delta: float, on_ground: bool):
-	# First, always rotate the wheel mesh.
-	wheel_marker.rotate_x(wheel_angular_velocity * delta)
+func _calculate_wheel_size() -> float:
+	return ((abs(int(tyre_width_mm)) * ((abs(int(tyre_aspect_ratio)) * 2.0) / 100.0) + abs(int(rim_diameter_inches)) * 25.4) * 0.001) / 2.0
 
-	if on_ground:
-		# --- ON GROUND LOGIC ---
-		var desired_world_position = hit_position + (global_transform.basis.y * wheel_radius)
-		wheel_marker.global_position = desired_world_position
-	else:
-		# --- IN AIR LOGIC ---
-		var desired_world_position = global_position + (global_transform.basis.y * target_position.y)
-		wheel_marker.global_position = desired_world_position
+func _calculate_suspension(elasticity: float, damping: float, damping_rebound: float, linearz: float, g_range: float, located: Vector3, hit_located: Vector3) -> float:
+	# This function is unchanged from the previous, metric-corrected version.
+	# It correctly uses lerp for dynamic stiffness and handles bottoming out.
+	geometry_node.global_position = hit_located
 
-	# --- DYNAMIC GEOMETRY (Translated from original) ---
-	# This section calculates the dynamic camber and tuck-in based on the wheel's vertical position.
-	axle_y_position = wheel_marker.position.y
+	velocity_node.global_transform = align_axis_to_vector(velocity_node.global_transform, get_collision_normal())
+	velocity_2_node.global_transform = align_axis_to_vector(velocity_2_node.global_transform, get_collision_normal())
 
-	# Calculate camber gain (`g` from original)
-	var g = (axle_y_position + geometry_horizontal_tuck) / (abs(position.x) + geometry_pivot_offset + 1.0)
-	g /= abs(g) + 1.0 # This is a form of atan-like normalization
-	dynamic_camber_degrees = (g * 90.0) - geometry_camber_offset_degrees
+	var incline = (get_collision_normal() - global_transform.basis.y).length()
+	incline = (incline - geometry_incline_free_zone) / (1.0 - geometry_incline_free_zone) if geometry_incline_free_zone < 1.0 else 0.0
+	incline = clamp(incline * geometry_incline_impact_factor, 0.0, 1.0)
 
-	# Calculate horizontal tuck-in (`inned` from original)
-	var total_dynamic_camber = abs(dynamic_camber_degrees) + geometry_camber_offset_degrees
-	var inned_factor = (total_dynamic_camber / 90.0)
-	inned_factor *= inned_factor - (geometry_camber_offset_degrees / 90.0)
+	if geometry_node.position.y > -g_range + suspension_max_travel * (1.0 - incline):
+		geometry_node.position.y = - g_range + suspension_max_travel * (1.0 - incline)
 
-	# Apply the geometry changes to the visual mesh and its parent nodes.
-	# We use the parent `Camber` node to apply the total camber angle.
-	var total_camber_rads = deg_to_rad(camber_degrees + (dynamic_camber_degrees * geometry_camber_gain_factor))
+	var compressed = g_range - located.distance_to(hit_located)
+	var bottom_out_compression = compressed - suspension_max_travel
+	var spring_compression = compressed - suspension_rest_length
+	if spring_compression < 0.0: spring_compression = 0.0
+	if bottom_out_compression < 0.0: bottom_out_compression = 0.0
 
-	# The tuck-in is applied to the parent of the camber node.
-	var animation_node = camber_node.get_parent()
-	animation_node.position.x = - inned_factor * abs(position.x)
+	var bottom_out_stiffness = car.mass * 20.0
+	var bottom_out_damping = car.mass * 2.0
+	var effective_stiffness = lerp(elasticity, bottom_out_stiffness, incline)
+	var damping_to_use = damping if linearz < 0 else damping_rebound
+	var effective_damping = lerp(damping_to_use, bottom_out_damping, incline)
 
-	# Ensure rotation is applied correctly based on which side of the car it's on
-	camber_node.rotation.z = total_camber_rads * -sign(position.x)
+	var suspforce = spring_compression * effective_stiffness
+	if bottom_out_compression > 0.0:
+		suspforce += bottom_out_compression * (bottom_out_stiffness * 2.0)
+		suspforce -= linearz * bottom_out_damping
 
-func _calculate_and_apply_friction_forces(delta: float, susp_force: float):
-	if susp_force <= 0: return
+	suspforce -= linearz * effective_damping
 
-	# 1. Calculate Available Grip (Translated from `grip` variable)
-	# Grip is directly proportional to the suspension force (normal load).
-	var available_grip = susp_force * compound_grip_factor
-
-	# 2. Get Velocities (Replaces the `velocity` and `velocity2` tracker nodes)
-	# We get the velocity of the ground at the contact patch, in the wheel's local space.
-	var ground_velocity_world = car.linear_velocity + car.angular_velocity.cross(position - car.global_position)
-	var ground_velocity_local = global_transform.basis.transposed() * ground_velocity_world
-
-	# The velocity of the tyre's surface due to its rotation.
-	var surface_speed = wheel_angular_velocity * wheel_radius
-
-	# 3. Calculate Slip Velocities (Translated from `distx` and `disty`)
-	# This is the difference between how fast the tyre surface is moving and how fast the ground is.
-	var slip_velocity_longitudinal = surface_speed - ground_velocity_local.z
-	var slip_velocity_lateral = - ground_velocity_local.x # Lateral is along the wheel's X-axis
-
-	# 4. Calculate Slip Ratio (Translated from `slip` variable)
-	# This is a normalized value of the total slip.
-	var slip_velocity_total = Vector2(slip_velocity_lateral, slip_velocity_longitudinal).length()
-	var slip_ratio = slip_velocity_total / available_grip
-
-	# Apply falloff curve (Translated from `slip /= slip * ground_builduprate + 1.0`)
-	slip_ratio /= (slip_ratio * friction_slip_falloff) + 1.0
-
-	# Apply traction factor (Translated from `slip -= CompoundSettings["TractionFactor"]`)
-	slip_ratio -= friction_traction_factor
-	slip_ratio = max(slip_ratio, 0.0)
-
-	# 5. Calculate Raw Forces (Translated from `forcex` and `forcey`)
-	# The force is the slip velocity, but it's clamped by the slip ratio.
-	# A slip_ratio of 0 means perfect grip; no sliding, so full force is applied.
-	# A slip_ratio of >0 means sliding; the force is reduced.
-	var force_y = - slip_velocity_longitudinal / (slip_ratio + 1.0)
-	var force_x = - slip_velocity_lateral / (slip_ratio + 1.0)
-
-	# 6. Apply Force Rigidity (Translated from the smoothing/rigidity block)
-	# This is a non-linear effect that makes the tyre feel 'stiffer' or 'sharper'.
-	var rigidity = friction_force_rigidity
-	var inv_rigidity = 1.0 - rigidity
-
-	var force_x_abs_norm = min(abs(force_x), 1.0)
-	var smooth_x = force_x_abs_norm * force_x_abs_norm # Squaring it creates a curve
-	force_x /= (smooth_x * rigidity) + inv_rigidity
-
-	var force_y_abs_norm = min(abs(force_y), 1.0)
-	# The original script had a different curve for longitudinal force
-	var smooth_y = force_y_abs_norm * 1.0
-	force_y /= (smooth_y * rigidity) + inv_rigidity
-
-	# 7. Apply Final Forces to the Car Body
-	var friction_force_local = Vector3(force_x, 0, force_y)
-	car.apply_force(global_transform.basis * friction_force_local, position)
-
-	# 8. Apply Resistive Torque back to the Wheel
-	# The ground pushing back on the tyre creates a torque that opposes its spin.
-	var friction_torque = force_y * wheel_radius
-	var wheel_inertia = 0.5 * pow(wheel_radius, 2) * wheel_mass_kg
-	if wheel_inertia > 0:
-		var angular_accel_from_friction = friction_torque / wheel_inertia
-		wheel_angular_velocity += angular_accel_from_friction * delta
+	rd = compressed
+	if suspforce < 0.0: suspforce = 0.0
+	return suspforce

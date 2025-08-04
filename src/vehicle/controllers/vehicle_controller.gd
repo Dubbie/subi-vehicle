@@ -29,12 +29,21 @@ class_name VehicleBody
 @export var ABS_Pump_Time: float = 0.02
 @export var ABS_Pump_Force: float = 25.0 # Rate of brake pressure change per second
 
+@export_group("Drivetrain")
+@export var clutch_grip_torque: float = 400.0
+@export var clutch_stability_factor: float = 0.5 # Corresponds to ClutchStable
+@export var driveshaft_inertia_factor: float = 150.0 # Corresponds to DSWeight
+@export var differential_lock_factor: float = 0.1
+@export var powered_wheels: Array[WheelController]
+
 # --- Internal Physics State (Class-Level Variables) ---
 var throttle: float = 0.0
 var rpm: float = 0.0
 var rpmforce: float = 0.0 # The net rotational acceleration on the engine (in RPM/sec)
 var gear: int = 0
 var limdel_timer: float = 0.0 # Timer for the rev limiter
+var drivetrain_resistance: float = 0.0 # Total resistance from wheels fed back to the engine.
+var clutch_engagement: float = 0.0
 
 var past_velocity := Vector3.ZERO
 var g_force := Vector3.ZERO
@@ -158,7 +167,17 @@ func limits():
 	throttle = clamp(throttle, 0.0, 1.0)
 	pass
 
-func drivetrain(_torque_from_engine: float, _d: float):
-	# This method will use 'torque_from_engine' and can also access 'self.rpm'
-	# and 'self.rpmforce' to simulate the load from the wheels on the engine.
+# Replace your ENTIRE drivetrain() function in VehicleBody.gd with this one.
+
+func drivetrain(torque_from_engine: float, delta: float):
 	pass
+
+func get_final_gear_ratio() -> float:
+	# This needs to be connected to your future transmission logic.
+	# For now, we'll return a placeholder. Let's assume a final drive of 4.1.
+	# A value of 0 would cause a division by zero error.
+	var gear_ratio = 3.25 # 1st gear
+	var final_drive = 4.1
+	var ratio_mult = 9.5 # From original script
+	var total_ratio = gear_ratio * final_drive * ratio_mult
+	return total_ratio if total_ratio != 0 else 1.0
