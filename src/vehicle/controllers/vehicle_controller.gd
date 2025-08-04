@@ -39,6 +39,13 @@ enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
 @export_group("Drivetrain")
 @export var driveshaft_inertia_factor: float = 150.0 # Corresponds to DSWeight
 @export var differential_lock_factor: float = 0.1
+@export var diff_coast_locking: float = 0.0
+@export var diff_power_locking: float = 0.0
+@export var diff_preload: float = 0.0
+@export var diff_centre_coast_locking: float = 0.0
+@export var diff_centre_power_locking: float = 0.0
+@export var diff_centre_preload: float = 0.0
+@export var stress_factor: float = 1.0
 @export var powered_wheels: Array[WheelController]
 
 @export_group("Transmission")
@@ -51,6 +58,12 @@ enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
 @export_group("Clutch")
 @export var clutch_grip_torque: float = 400.0
 @export var clutch_stability_factor: float = 0.5
+@export var clutch_elasticity: float = 0.5
+@export var clutch_wobble: float = 0.0
+@export var clutch_wobble_rate: float = 0.0
+@export var clutch_float_reduction: float = 20.0
+@export var clutch_gear_ratio_ratio_threshold: float = 200.0
+@export var clutch_threshold_stable: float = 0.0
 
 @export_group("Gear Assistant")
 ## The shift delay, in frames
@@ -69,13 +82,24 @@ enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
 # --- Internal Physics State (Class-Level Variables) ---
 var throttle: float = 0.0
 var rpm: float = 0.0
+var rpmcs: float = 0.0
+var wob: float = 0.0
 var rpmforce: float = 0.0 # The net rotational acceleration on the engine (in RPM/sec)
 var gear: int = 0
+var currentstable: float = 0.0
 var drivetrain_resistance: float = 0.0 # Total resistance from wheels fed back to the engine.
 var ratio: float = 0.0
 var stalled: float = 0.0
 var gearstress: float = 0.0
 var drivewheels_size: float = 0.0
+var ds_weight: float = 0.0 # Excuse me what?
+var dsweight: float = 0.0 # Excuse me what?
+var dsweightrun: float = 0.0
+var diff_locked: float = 0.0
+var diff_center_locked: float = 0.0
+var wv_difference: float = 0.0
+var dist: float = 0.0
+var stress: float = 0.0
 
 var local_velocity: Vector3 = Vector3.ZERO
 var local_angular_velocity: Vector3 = Vector3.ZERO
@@ -347,8 +371,112 @@ func limits():
 	pass
 
 func drivetrain():
+	rpmcs -= (rpmcs - drivetrain_resistance)
+	rpmcs += rpmcs * clutch_elasticity
+	rpmcs -= rpmcs * pedal_controller.get_clutch_engagement()
+	wob = clutch_wobble * pedal_controller.clutch_pedal
+	wob *= ratio * clutch_wobble_rate
+	rpmcs -= (rpmcs - drivetrain_resistance) * (1.0 / (wob + 1.0))
+
+	var magic_rpm_number: float = 1.475
+	if gear < 0:
+		rpm -= rpmcs * rev_speed / magic_rpm_number
+	else:
+		rpm += rpmcs * rev_speed / magic_rpm_number
+
+	gearstress = (abs(drivetrain_resistance) * stress_factor) * pedal_controller.clutch_pedal
+	var stabled = ratio * 0.9 + 0.1
+	ds_weight = driveshaft_inertia_factor / stabled
+
+	if drivetrain_resistance > 0.0:
+		diff_locked = abs(drivetrain_resistance / ds_weight) * (diff_coast_locking / 100.0) + diff_preload
+	else:
+		diff_locked = abs(drivetrain_resistance / ds_weight) * (diff_power_locking / 100.0) + diff_preload
+
+	if diff_locked < 0.0:
+		diff_locked = 0.0
+	elif diff_locked > 1.0:
+		diff_locked = 1.0
+
+	if wv_difference > 0.0:
+		diff_center_locked = abs(wv_difference) * (diff_centre_coast_locking / 10.0) + diff_centre_preload
+	else:
+		diff_center_locked = abs(wv_difference) * (diff_centre_power_locking / 10.0) + diff_centre_preload
+	if diff_center_locked < 0.0 or len(powered_wheels) < 4:
+		diff_center_locked = 0.0
+	elif diff_center_locked > 1.0:
+		diff_center_locked = 1.0
+
+	var maxd: WheelController = _get_fastest_driven_wheel()
+	var what: float = 0.0
+
+	var float_reduction: float = clutch_float_reduction
+
+	if dsweightrun > 0.0:
+		float_reduction = clutch_float_reduction / dsweightrun
+	else:
+		float_reduction = 0.0
+
+	var stabling = - (clutch_gear_ratio_ratio_threshold - ratio * drivewheels_size) * clutch_threshold_stable
+	if stabling < 0.0:
+		stabling = 0.0
+
+	currentstable = clutch_stability_factor * stabling
+	currentstable *= rev_speed / magic_rpm_number
+
+	if dsweightrun > 0.0:
+		what = (rpm - (((rpmforce * float_reduction) * pow(currentstable, 1.0)) / (ds_weight / dsweightrun)))
+	else:
+		what = rpm
+
+	if gear < 0.0:
+		dist = maxd.wv + what / ratio
+	else:
+		dist = maxd.wv - what / ratio
+
+	dist *= (pedal_controller.clutch_pedal * pedal_controller.clutch_pedal)
+
+	if gear == 0:
+		dist *= 0.0
+
+	wv_difference = 0.0
 	drivewheels_size = 0.0
 	for wheel in powered_wheels:
 		drivewheels_size += wheel.w_size / len(powered_wheels)
+		wheel.c_p = wheel.power_bias
+		wv_difference += ((wheel.wv - what / ratio) / (len(powered_wheels))) * (pedal_controller.clutch_pedal * pedal_controller.clutch_pedal)
+		if gear < 0:
+			wheel.dist = dist * (1 - diff_center_locked) + (wheel.wv + what / ratio) * diff_center_locked
+		else:
+			wheel.dist = dist * (1 - diff_center_locked) - (wheel.wv - what / ratio) * diff_center_locked
+		if gear == 0:
+			wheel.dist *= 0.0
 
 	ga_speed_influence = drivewheels_size
+	drivetrain_resistance = 0.0
+	dsweightrun = dsweight
+	stress = 0.0
+
+func _get_fastest_driven_wheel() -> WheelController:
+	var val = -10000000000000000000000000000000000.0
+	var obj: WheelController = null
+
+	for wheel in powered_wheels:
+		val = max(val, abs(wheel.absolute_wv))
+
+		if val == abs(wheel.absolute_wv):
+			obj = wheel
+
+	return obj
+
+func _get_slowest_driven_wheel() -> WheelController:
+	var val = 10000000000000000000000000000000000.0
+	var obj: WheelController = null
+
+	for wheel in powered_wheels:
+		val = min(val, abs(wheel.absolute_wv))
+
+		if val == abs(wheel.absolute_wv):
+			obj = wheel
+
+	return obj
