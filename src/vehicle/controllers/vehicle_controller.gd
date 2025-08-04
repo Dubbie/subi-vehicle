@@ -67,7 +67,7 @@ enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
 
 @export_group("Gear Assistant")
 ## The shift delay, in frames
-@export var ga_shift_delay: int = 50
+@export var ga_shift_delay: float = 50
 ## Assistance level
 @export var ga_level: GearAssistantLevel = GearAssistantLevel.FULL_AUTO
 ## Downshift rpm iteration
@@ -105,7 +105,7 @@ var local_velocity: Vector3 = Vector3.ZERO
 var local_angular_velocity: Vector3 = Vector3.ZERO
 
 var limdel: int = 0 # Timer for the rev limiter
-var sassistdel: int = 0 # Timer for the shift assist
+var sassistdel: float = 0 # Timer for the shift assist
 var sassiststep: int = 0
 var ga_speed_influence: float = 0.0
 var actualgear: int = 0
