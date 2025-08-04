@@ -15,6 +15,15 @@ extends RayCast3D
 @export var rim_diameter_inches: float = 14.0
 @export var tyre_pressure_psi: float = 30.0
 
+@export_group("Tyre Friction Model")
+# How quickly grip falls off after the optimal slip is exceeded.
+@export var friction_slip_falloff: float = 1.0
+# The base traction factor, affecting the optimal slip angle/ratio.
+@export var friction_traction_factor: float = 1.0
+# A "magic number" that simulates the non-linear relationship between side-slip
+# and lateral force. Higher values make the tyre feel 'sharper' at the limit.
+@export var friction_force_rigidity: float = 0.67
+
 @export_group("Tyre Compound")
 @export var compound_grip_factor: float = 1.0 # Base grip multiplier
 @export var compound_stiffness: float = 1.0 # How much the compound resists deformation
@@ -50,7 +59,8 @@ extends RayCast3D
 
 # --- Node References ---
 @onready var car: VehicleBody = get_owner()
-@onready var wheel_mesh: Marker3D = $Animation/Camber/Wheel # A direct reference to the visual mesh
+@onready var camber_node: Marker3D = $Animation/Camber
+@onready var wheel_marker: Marker3D = $Animation/Camber/Wheel # A direct reference to the visual mesh
 
 # --- Internal State Variables ---
 var wheel_radius: float = 0.3
@@ -76,39 +86,25 @@ func _physics_process(delta: float):
 
 	if is_colliding():
 		hit_position = get_collision_point()
-
-		# In your original script, geometry was calculated based on the visual wheel's
-		# position from the PREVIOUS frame. We replicate that by updating visuals/geometry first.
 		_update_visuals_and_geometry(delta, true)
 
-		# Now, calculate the definitive suspension force using the collision data.
 		suspension_force = _calculate_suspension_force(delta)
 		car.apply_force(global_transform.basis.y * suspension_force, position)
 
-		# --- (Brake and Friction logic remains the same) ---
+		# --- Brake Torque Application ---
+		# This part remains simple for now. We will integrate engine torque later.
 		var brake_application = (car.brakeline * brake_bias) + (car.pedal_controller.get_handbrake() * handbrake_bias)
-		var current_brake_torque = brake_torque * clamp(brake_application, 0.0, 1.0)
-
+		var brake_force = brake_torque * clamp(brake_application, 0.0, 1.0)
 		var wheel_inertia = 0.5 * pow(wheel_radius, 2) * wheel_mass_kg
 		if wheel_inertia > 0:
-			var angular_acceleration = - current_brake_torque / wheel_inertia
+			var angular_acceleration = - brake_force / wheel_inertia
 			wheel_angular_velocity += angular_acceleration * delta
 
-		var ground_velocity = car.linear_velocity + car.angular_velocity.cross(position)
-		var local_ground_vel = global_transform.basis.transposed() * ground_velocity
-		var surface_speed = wheel_angular_velocity * wheel_radius
-		var slip_longitudinal = surface_speed - local_ground_vel.z
-		var slip_lateral = - local_ground_vel.x
+		# --- NEW: Call the dedicated friction function ---
+		_calculate_and_apply_friction_forces(delta, suspension_force)
 
-		var tyre_stiffness = tyre_width_mm * compound_stiffness
-		var longitudinal_force = clamp(slip_longitudinal * tyre_stiffness, -suspension_force, suspension_force)
-		var lateral_force = clamp(slip_lateral * tyre_stiffness, -suspension_force, suspension_force)
-		var friction_force_local = Vector3(lateral_force, 0, longitudinal_force)
-		car.apply_force(global_transform.basis * friction_force_local, position)
 	else:
-		# If in the air, update visuals to the "drooped" state.
 		_update_visuals_and_geometry(delta, false)
-
 
 func _calculate_suspension_force(delta: float) -> float:
 	if not is_colliding() or delta == 0:
@@ -166,20 +162,20 @@ func _calculate_suspension_force(delta: float) -> float:
 
 func _update_visuals_and_geometry(delta: float, on_ground: bool):
 	# First, always rotate the wheel mesh.
-	wheel_mesh.rotate_x(wheel_angular_velocity * delta)
+	wheel_marker.rotate_x(wheel_angular_velocity * delta)
 
 	if on_ground:
 		# --- ON GROUND LOGIC ---
 		var desired_world_position = hit_position + (global_transform.basis.y * wheel_radius)
-		wheel_mesh.global_position = desired_world_position
+		wheel_marker.global_position = desired_world_position
 	else:
 		# --- IN AIR LOGIC ---
 		var desired_world_position = global_position + (global_transform.basis.y * target_position.y)
-		wheel_mesh.global_position = desired_world_position
+		wheel_marker.global_position = desired_world_position
 
 	# --- DYNAMIC GEOMETRY (Translated from original) ---
 	# This section calculates the dynamic camber and tuck-in based on the wheel's vertical position.
-	axle_y_position = wheel_mesh.position.y
+	axle_y_position = wheel_marker.position.y
 
 	# Calculate camber gain (`g` from original)
 	var g = (axle_y_position + geometry_horizontal_tuck) / (abs(position.x) + geometry_pivot_offset + 1.0)
@@ -193,7 +189,6 @@ func _update_visuals_and_geometry(delta: float, on_ground: bool):
 
 	# Apply the geometry changes to the visual mesh and its parent nodes.
 	# We use the parent `Camber` node to apply the total camber angle.
-	var camber_node = wheel_mesh.get_parent()
 	var total_camber_rads = deg_to_rad(camber_degrees + (dynamic_camber_degrees * geometry_camber_gain_factor))
 
 	# The tuck-in is applied to the parent of the camber node.
@@ -202,3 +197,68 @@ func _update_visuals_and_geometry(delta: float, on_ground: bool):
 
 	# Ensure rotation is applied correctly based on which side of the car it's on
 	camber_node.rotation.z = total_camber_rads * -sign(position.x)
+
+func _calculate_and_apply_friction_forces(delta: float, susp_force: float):
+	if susp_force <= 0: return
+
+	# 1. Calculate Available Grip (Translated from `grip` variable)
+	# Grip is directly proportional to the suspension force (normal load).
+	var available_grip = susp_force * compound_grip_factor
+
+	# 2. Get Velocities (Replaces the `velocity` and `velocity2` tracker nodes)
+	# We get the velocity of the ground at the contact patch, in the wheel's local space.
+	var ground_velocity_world = car.linear_velocity + car.angular_velocity.cross(position - car.global_position)
+	var ground_velocity_local = global_transform.basis.transposed() * ground_velocity_world
+
+	# The velocity of the tyre's surface due to its rotation.
+	var surface_speed = wheel_angular_velocity * wheel_radius
+
+	# 3. Calculate Slip Velocities (Translated from `distx` and `disty`)
+	# This is the difference between how fast the tyre surface is moving and how fast the ground is.
+	var slip_velocity_longitudinal = surface_speed - ground_velocity_local.z
+	var slip_velocity_lateral = - ground_velocity_local.x # Lateral is along the wheel's X-axis
+
+	# 4. Calculate Slip Ratio (Translated from `slip` variable)
+	# This is a normalized value of the total slip.
+	var slip_velocity_total = Vector2(slip_velocity_lateral, slip_velocity_longitudinal).length()
+	var slip_ratio = slip_velocity_total / available_grip
+
+	# Apply falloff curve (Translated from `slip /= slip * ground_builduprate + 1.0`)
+	slip_ratio /= (slip_ratio * friction_slip_falloff) + 1.0
+
+	# Apply traction factor (Translated from `slip -= CompoundSettings["TractionFactor"]`)
+	slip_ratio -= friction_traction_factor
+	slip_ratio = max(slip_ratio, 0.0)
+
+	# 5. Calculate Raw Forces (Translated from `forcex` and `forcey`)
+	# The force is the slip velocity, but it's clamped by the slip ratio.
+	# A slip_ratio of 0 means perfect grip; no sliding, so full force is applied.
+	# A slip_ratio of >0 means sliding; the force is reduced.
+	var force_y = - slip_velocity_longitudinal / (slip_ratio + 1.0)
+	var force_x = - slip_velocity_lateral / (slip_ratio + 1.0)
+
+	# 6. Apply Force Rigidity (Translated from the smoothing/rigidity block)
+	# This is a non-linear effect that makes the tyre feel 'stiffer' or 'sharper'.
+	var rigidity = friction_force_rigidity
+	var inv_rigidity = 1.0 - rigidity
+
+	var force_x_abs_norm = min(abs(force_x), 1.0)
+	var smooth_x = force_x_abs_norm * force_x_abs_norm # Squaring it creates a curve
+	force_x /= (smooth_x * rigidity) + inv_rigidity
+
+	var force_y_abs_norm = min(abs(force_y), 1.0)
+	# The original script had a different curve for longitudinal force
+	var smooth_y = force_y_abs_norm * 1.0
+	force_y /= (smooth_y * rigidity) + inv_rigidity
+
+	# 7. Apply Final Forces to the Car Body
+	var friction_force_local = Vector3(force_x, 0, force_y)
+	car.apply_force(global_transform.basis * friction_force_local, position)
+
+	# 8. Apply Resistive Torque back to the Wheel
+	# The ground pushing back on the tyre creates a torque that opposes its spin.
+	var friction_torque = force_y * wheel_radius
+	var wheel_inertia = 0.5 * pow(wheel_radius, 2) * wheel_mass_kg
+	if wheel_inertia > 0:
+		var angular_accel_from_friction = friction_torque / wheel_inertia
+		wheel_angular_velocity += angular_accel_from_friction * delta
