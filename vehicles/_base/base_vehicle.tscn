@@ -20,11 +20,10 @@ script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
 Weight = 1260.0
 torque_curve = SubResource("Curve_rt677")
-IdleRPM = 850.0
-RPMLimit = 7200.0
-DeadRPM = 400.0
-RevSpeed = 15000.0
-EngineDrag = 0.8
+throttle_idle = 0.4
+rev_speed = 0.5
+engine_drag = 0.004
+throttle_response = 0.2
 powered_wheels = [NodePath("Wheels/WheelRL"), NodePath("Wheels/WheelRR")]
 
 [node name="Components" type="Node" parent="."]
