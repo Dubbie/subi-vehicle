@@ -1,7 +1,7 @@
 class_name WheelController
 extends RayCast3D
 
-#region Export Variables
+#region Export
 @export_group("Wheel Setup")
 @export var is_steering_wheel: bool = true
 @export var power_bias: float = 1.0 # How much of the engine torque this wheel receives
@@ -63,6 +63,7 @@ extends RayCast3D
 @export var a_geometry_4: float = 0.0
 #endregion
 
+#region Internal
 var dist = 0.0
 var w_size = 1.0
 var w_size_read = 1.0
@@ -128,6 +129,7 @@ var slip_percpre = 0.0
 
 var velocity_last = Vector3(0, 0, 0)
 var velocity2_last = Vector3(0, 0, 0)
+#endregion
 
 # --- Node References ---
 @onready var car: VehicleBody = get_owner()
@@ -156,6 +158,7 @@ func diffs() -> void:
 func sway() -> void:
 	pass
 
+#region Physics
 func _physics_process(delta: float) -> void:
 	var translation = position
 	var cast_to = target_position
@@ -231,6 +234,7 @@ func _physics_process(delta: float) -> void:
 	animation_node.position = geometry_node.position
 
 	car.apply_force((velocity_2_node.global_transform.basis.orthonormalized() * Vector3.UP) * directional_force.y, hitposition - car.global_transform.origin)
+#endregion
 
 func align_axis_to_vector(xform: Transform3D, norm: Vector3) -> Transform3D:
 	if norm == Vector3.ZERO: return xform # Safety check
