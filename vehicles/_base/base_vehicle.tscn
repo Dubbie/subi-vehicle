@@ -45,6 +45,7 @@ mesh = SubResource("BoxMesh_6w078")
 
 [node name="WheelFL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
+target_position = Vector3(0, -0.4, 0)
 wheel_mass_kg = 18.0
 tyre_width_mm = 205.0
 tyre_aspect_ratio = 55.0
@@ -67,6 +68,7 @@ sides = 24
 
 [node name="WheelFR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
+target_position = Vector3(0, -0.4, 0)
 wheel_mass_kg = 18.0
 tyre_width_mm = 205.0
 tyre_aspect_ratio = 55.0
@@ -89,6 +91,7 @@ sides = 24
 
 [node name="WheelRL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
+target_position = Vector3(0, -0.4, 0)
 is_steering_wheel = false
 power_bias = 0.5
 brake_bias = 0.6
@@ -114,6 +117,7 @@ sides = 24
 
 [node name="WheelRR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
+target_position = Vector3(0, -0.4, 0)
 is_steering_wheel = false
 power_bias = 0.5
 brake_bias = 0.6
