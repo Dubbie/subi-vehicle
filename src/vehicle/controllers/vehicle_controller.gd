@@ -3,7 +3,7 @@ extends RigidBody3D
 class_name VehicleBody
 
 # --- Components ---
-@onready var pedal_controller: PedalController = $PedalController
+@export var pedal_controller: PedalController
 
 # --- Vehicle Configuration ---
 @export_group("Chassis")
@@ -49,7 +49,6 @@ const GRAVITY_ACCELERATION = 9.80665
 func _ready():
 	mass = Weight
 	rpm = IdleRPM
-
 
 # The main physics loop. All time-dependent calculations now use the 'delta' parameter.
 func _physics_process(delta: float):

@@ -28,11 +28,8 @@ shape = SubResource("BoxShape3D_wh4hx")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D"]
 mesh = SubResource("BoxMesh_6mb5t")
 
-[node name="BaseVehicle" parent="." instance=ExtResource("1_6mb5t")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.454058, 0)
-
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 4, 1, 0)
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 8, 1, 0)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_wu8pm")
@@ -40,3 +37,6 @@ environment = SubResource("Environment_wu8pm")
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.612372, -0.158494, -0.774519, 0.612372, -0.524519, 0.591506, -0.5, -0.836516, -0.224144, 0, 0, 0)
 shadow_enabled = true
+
+[node name="BaseVehicle" parent="." instance=ExtResource("1_6mb5t")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02129, 0)

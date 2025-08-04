@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://c5wn8h36ysels"]
+
+[ext_resource type="Script" uid="uid://lob2di353ovq" path="res://src/vehicle/controllers/wheel_controller.gd" id="1_khe0o"]
+
+[node name="Wheel" type="RayCast3D"]
+script = ExtResource("1_khe0o")
+
+[node name="Geometry" type="Marker3D" parent="."]
+
+[node name="Animation" type="Marker3D" parent="."]
+
+[node name="Camber" type="Marker3D" parent="Animation"]
+
+[node name="Wheel" type="Marker3D" parent="Animation/Camber"]
