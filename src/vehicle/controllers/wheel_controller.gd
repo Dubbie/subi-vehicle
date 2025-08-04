@@ -236,27 +236,13 @@ func _physics_process(delta: float) -> void:
 	car.apply_force((velocity_2_node.global_transform.basis.orthonormalized() * Vector3.UP) * directional_force.y, hitposition - car.global_transform.origin)
 #endregion
 
-func align_axis_to_vector(xform: Transform3D, norm: Vector3) -> Transform3D:
-	if norm == Vector3.ZERO: return xform # Safety check
-
-	xform.basis.y = norm
-	# Rebuild the X and Z axes to be perpendicular to the new Y-axis (the normal)
-	# and to each other. This is a robust way to prevent the matrix from becoming invalid.
-	xform.basis.x = xform.basis.z.cross(norm).normalized()
-	xform.basis.z = xform.basis.x.cross(norm).normalized()
-	return xform
-
-
-func _calculate_wheel_size() -> float:
-	return ((abs(int(tyre_width_mm)) * ((abs(int(tyre_aspect_ratio)) * 2.0) / 100.0) + abs(int(rim_diameter_inches)) * 25.4) * 0.001) / 2.0
-
 func _calculate_suspension(elasticity: float, damping: float, damping_rebound: float, linearz: float, g_range: float, located: Vector3, hit_located: Vector3) -> float:
 	# This function is unchanged from the previous, metric-corrected version.
 	# It correctly uses lerp for dynamic stiffness and handles bottoming out.
 	geometry_node.global_position = hit_located
 
-	velocity_node.global_transform = align_axis_to_vector(velocity_node.global_transform, get_collision_normal())
-	velocity_2_node.global_transform = align_axis_to_vector(velocity_2_node.global_transform, get_collision_normal())
+	velocity_node.global_transform = _align_axis_to_vector(velocity_node.global_transform, get_collision_normal())
+	velocity_2_node.global_transform = _align_axis_to_vector(velocity_2_node.global_transform, get_collision_normal())
 
 	var incline = (get_collision_normal() - global_transform.basis.y).length()
 	incline = (incline - geometry_incline_free_zone) / (1.0 - geometry_incline_free_zone) if geometry_incline_free_zone < 1.0 else 0.0
@@ -287,3 +273,19 @@ func _calculate_suspension(elasticity: float, damping: float, damping_rebound: f
 	rd = compressed
 	if suspforce < 0.0: suspforce = 0.0
 	return suspforce
+
+#region Utils
+func _align_axis_to_vector(xform: Transform3D, norm: Vector3) -> Transform3D:
+	if norm == Vector3.ZERO: return xform # Safety check
+
+	xform.basis.y = norm
+	# Rebuild the X and Z axes to be perpendicular to the new Y-axis (the normal)
+	# and to each other. This is a robust way to prevent the matrix from becoming invalid.
+	xform.basis.x = xform.basis.z.cross(norm).normalized()
+	xform.basis.z = xform.basis.x.cross(norm).normalized()
+	return xform
+
+
+func _calculate_wheel_size() -> float:
+	return ((abs(int(tyre_width_mm)) * ((abs(int(tyre_aspect_ratio)) * 2.0) / 100.0) + abs(int(rim_diameter_inches)) * 25.4) * 0.001) / 2.0
+#endregion

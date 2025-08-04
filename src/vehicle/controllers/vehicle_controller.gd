@@ -11,17 +11,17 @@ class_name VehicleBody
 
 @export_group("Engine")
 @export var torque_curve: Curve # Assign a Curve resource in the Inspector
-@export var IdleRPM: float = 800.0
-@export var RPMLimit: float = 7000.0
-@export var DeadRPM: float = 100.0 # RPM below which the engine is considered stalled
-# Note: LimiterDelay is now in seconds, not frames (e.g., 0.07)
-@export var LimiterDelay: float = 0.07
-@export var ThrottleIdle: float = 0.25
+@export var idle_rpm: float = 800.0
+@export var rpm_limit: float = 7000.0
+@export var dead_rpm: float = 100.0 # RPM below which the engine is considered stalled
+# Note: limiter_delay is now in seconds, not frames (e.g., 0.07)
+@export var limiter_delay: float = 0.07
+@export var throttle_idle: float = 0.25
 # NOTE: These values will need retuning as they are now used with 'delta'.
-@export var RevSpeed: float = 20000.0 # Acts as torque->acceleration multiplier (inverse inertia)
-@export var EngineFriction: float = 5e-05 # Coefficient for friction that scales with RPM^2
-@export var EngineDrag: float = 1.0 # Coefficient for linear RPM drag
-@export var ThrottleResponse: float = 15.0 # Rate of throttle change per second
+@export var rev_speed: float = 20000.0 # Acts as torque->acceleration multiplier (inverse inertia)
+@export var engine_friction: float = 5e-05 # Coefficient for friction that scales with RPM^2
+@export var engine_drag: float = 1.0 # Coefficient for linear RPM drag
+@export var throttle_response: float = 15.0 # Rate of throttle change per second
 
 @export_group("Braking")
 @export var ABS_Enabled: bool = true
@@ -45,19 +45,19 @@ var limdel_timer: float = 0.0 # Timer for the rev limiter
 var drivetrain_resistance: float = 0.0 # Total resistance from wheels fed back to the engine.
 var clutch_engagement: float = 0.0
 
-var past_velocity := Vector3.ZERO
-var g_force := Vector3.ZERO
+var past_velocity: Vector3 = Vector3.ZERO
+var g_force: Vector3 = Vector3.ZERO
 
 var brakeline: float = 0.0
 var brake_allowed: float = 1.0
 var abs_pump_timer: float = 0.0
 
-const GRAVITY_ACCELERATION = 9.80665
+const GRAVITY_ACCELERATION: float = 9.80665
 
 
 func _ready():
 	mass = Weight
-	rpm = IdleRPM
+	rpm = idle_rpm
 
 # The main physics loop. All time-dependent calculations now use the 'delta' parameter.
 func _physics_process(delta: float):
@@ -99,21 +99,21 @@ func _physics_process(delta: float):
 	if limdel_timer > 0:
 		target_throttle = 0.0 # If limiter is active, force throttle to close.
 
-	throttle = lerp(throttle, target_throttle, ThrottleResponse * delta)
+	throttle = lerp(throttle, target_throttle, throttle_response * delta)
 
 	# Apply engine idle control
-	if rpm < IdleRPM:
-		if throttle < ThrottleIdle:
-			throttle = lerp(throttle, ThrottleIdle, ThrottleResponse * delta)
+	if rpm < idle_rpm:
+		if throttle < throttle_idle:
+			throttle = lerp(throttle, throttle_idle, throttle_response * delta)
 
 	# Check if the rev limiter should be activated
-	if rpm > RPMLimit and limdel_timer <= 0:
-		limdel_timer = LimiterDelay
+	if rpm > rpm_limit and limdel_timer <= 0:
+		limdel_timer = limiter_delay
 
 	# 4. CALCULATE ENGINE TORQUE
 	# ----------------------------------------------------------------------
 	var engine_torque: float = 0.0
-	if torque_curve and rpm > DeadRPM:
+	if torque_curve and rpm > dead_rpm:
 		engine_torque = torque_curve.sample(rpm) * throttle
 
 	# 5. SIMULATE ENGINE INERTIA AND FRICTION
@@ -122,11 +122,11 @@ func _physics_process(delta: float):
 	# in RPM per second, making it fully frame-rate independent.
 
 	# Frictional/drag forces that resist engine rotation (in RPM/sec)
-	var friction_force = rpm * abs(rpm) * EngineFriction
-	var drag_force = rpm * EngineDrag
+	var friction_force = rpm * abs(rpm) * engine_friction
+	var drag_force = rpm * engine_drag
 
 	# Force from combustion that accelerates the engine (in RPM/sec)
-	var torque_force = engine_torque * RevSpeed # RevSpeed is inverse inertia
+	var torque_force = engine_torque * rev_speed # rev_speed is inverse inertia
 
 	# 'rpmforce' is the final rate of change for the RPM.
 	rpmforce = torque_force - friction_force - drag_force
@@ -145,7 +145,6 @@ func _physics_process(delta: float):
 
 
 # --- Placeholder Methods ---
-
 func aero(_local_vel: Vector3, _d: float):
 	pass
 
@@ -155,10 +154,7 @@ func controls(_local_vel: Vector3, _local_ang_vel: Vector3, d: float):
 	var handbrake_input = Input.is_action_pressed("handbrake")
 	var clutch_input = Input.is_action_pressed("clutch")
 
-	# The PedalController must also use delta directly.
-	# The previously provided PedalController code already does this.
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
-	pass
 
 func transmission(_local_vel: Vector3, _d: float):
 	pass
@@ -167,9 +163,7 @@ func limits():
 	throttle = clamp(throttle, 0.0, 1.0)
 	pass
 
-# Replace your ENTIRE drivetrain() function in VehicleBody.gd with this one.
-
-func drivetrain(torque_from_engine: float, delta: float):
+func drivetrain(_torque_from_engine: float, _delta: float):
 	pass
 
 func get_final_gear_ratio() -> float:
