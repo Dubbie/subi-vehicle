@@ -22,7 +22,8 @@ Weight = 1260.0
 torque_curve = SubResource("Curve_rt677")
 throttle_idle = 0.4
 rev_speed = 0.5
-engine_drag = 0.004
+engine_friction = 25000.0
+engine_drag = 0.006
 throttle_response = 0.2
 powered_wheels = [NodePath("Wheels/WheelRL"), NodePath("Wheels/WheelRR")]
 

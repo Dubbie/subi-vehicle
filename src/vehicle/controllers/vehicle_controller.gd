@@ -2,6 +2,10 @@
 extends RigidBody3D
 class_name VehicleBody
 
+enum GearAssistantLevel {MANUAL, SEMI_AUTO, FULL_AUTO}
+
+enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
+
 # --- Components ---
 @export var pedal_controller: PedalController
 
@@ -37,9 +41,30 @@ class_name VehicleBody
 @export var differential_lock_factor: float = 0.1
 @export var powered_wheels: Array[WheelController]
 
+@export_group("Transmission")
+@export var transmission_type: TransmissionType = TransmissionType.FULLY_MANUAL
+@export var gear_ratios: Array[float] = [3.2, 1.894, 1.259, 1.0, 0.8]
+@export var reverse_ratio: float = 3.0
+@export var final_drive_ratio: float = 3.694
+@export var gear_gap: float = 60.0
+
 @export_group("Clutch")
 @export var clutch_grip_torque: float = 400.0
 @export var clutch_stability_factor: float = 0.5
+
+@export_group("Gear Assistant")
+## The shift delay, in frames
+@export var ga_shift_delay: int = 50
+## Assistance level
+@export var ga_level: GearAssistantLevel = GearAssistantLevel.FULL_AUTO
+## Downshift rpm iteration
+@export var ga_downshift_rpm: float = 6000.0
+## Upshift rpm iteration
+@export var ga_upshift_rpm: float = 6200.0
+## Clutch out RPM
+@export var ga_clutch_out_rpm: float = 3000.0
+## Throttle input allowed after shifting delay (in frames)
+@export var ga_throttle_allowed: int = 5
 
 # --- Internal Physics State (Class-Level Variables) ---
 var throttle: float = 0.0
@@ -47,15 +72,25 @@ var rpm: float = 0.0
 var rpmforce: float = 0.0 # The net rotational acceleration on the engine (in RPM/sec)
 var gear: int = 0
 var drivetrain_resistance: float = 0.0 # Total resistance from wheels fed back to the engine.
-var clutch_engagement: float = 0.0
 var ratio: float = 0.0
 var stalled: float = 0.0
+var gearstress: float = 0.0
+var drivewheels_size: float = 0.0
 
 var local_velocity: Vector3 = Vector3.ZERO
 var local_angular_velocity: Vector3 = Vector3.ZERO
 
 var limdel: int = 0 # Timer for the rev limiter
-var sassistdel: int = 0 # Timer for the steering assist
+var sassistdel: int = 0 # Timer for the shift assist
+var sassiststep: int = 0
+var ga_speed_influence: float = 0.0
+var actualgear: int = 0
+var gasrestricted: bool = false
+var clutchin: bool = false
+var revmatch: bool = false
+
+var shift_up: bool = false
+var shift_down: bool = false
 
 var past_velocity: Vector3 = Vector3.ZERO
 var g_force: Vector3 = Vector3.ZERO
@@ -113,7 +148,7 @@ func _physics_process(delta: float):
 	var target_throttle = current_gas_pedal # Placeholder for TCS factor
 
 	if limdel < 0:
-		throttle -= (throttle - (current_gas_pedal / (target_throttle * clutch_engagement + 1.0))) * throttle_response
+		throttle -= (throttle - (current_gas_pedal / (target_throttle * pedal_controller.get_clutch_engagement() + 1.0))) * throttle_response
 	else:
 		throttle -= throttle * throttle_response
 
@@ -145,7 +180,7 @@ func _physics_process(delta: float):
 
 	drivetrain()
 
-	print("RPM: %d, Throttle: %.2f" % [rpm, throttle])
+	print("RPM: %d\tThrottle: %.2f\tGear: %d\tClutch: %.2f" % [rpm, throttle, gear, pedal_controller.get_clutch_engagement()])
 
 # --- Placeholder Methods ---
 func aero():
@@ -159,11 +194,161 @@ func controls(d: float):
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
 
+# Gear Assistant
+# 0 = Shift delay
+# 1 = Level
+# 2 = Speed Influece  (not in the new export)
+# 3 = Downshift RPM iter
+# 4 = Upshift RPM
+# 5 = Clutch out RPM
+# 6 = throttle input frames
+
 func transmission():
-	pass
+	shift_up = Input.is_action_just_pressed("shift_up")
+	shift_down = Input.is_action_just_pressed("shift_down")
+
+	var gas = pedal_controller.get_throttle() > 0.01
+	var brake = pedal_controller.get_brake() > 0.01
+
+	if gear > 0:
+		ratio = gear_ratios[gear - 1] * final_drive_ratio
+	elif gear == -1:
+		ratio = reverse_ratio * final_drive_ratio
+
+	if transmission_type == TransmissionType.FULLY_MANUAL:
+		# Clutch is handled in the pedal controller now
+		if gear > 0:
+			ratio = gear_ratios[gear - 1] * final_drive_ratio
+		elif gear == -1:
+			ratio = reverse_ratio * final_drive_ratio
+
+		if ga_level == GearAssistantLevel.MANUAL:
+			if shift_up:
+				shift_up = false
+				if gear < len(gear_ratios):
+					if gearstress < gear_gap:
+						actualgear += 1
+			if shift_down:
+				shift_down = false
+				if gear > -1:
+					if gearstress < gear_gap:
+						actualgear -= 1
+		elif ga_level == GearAssistantLevel.SEMI_AUTO:
+			if rpm < ga_clutch_out_rpm:
+				var irga_ca = (ga_clutch_out_rpm - rpm) / (ga_clutch_out_rpm - idle_rpm)
+				pedal_controller.clutch_pedal = irga_ca * irga_ca
+				if pedal_controller.clutch_pedal > 1.0:
+					pedal_controller.clutch_pedal = 1.0
+			else:
+				if not gasrestricted and not revmatch:
+					clutchin = false
+
+			if shift_up:
+				shift_up = false
+				if gear < len(gear_ratios):
+					if rpm < ga_clutch_out_rpm:
+						actualgear += 1
+					else:
+						if actualgear < 1:
+							actualgear += 1
+							if rpm > ga_clutch_out_rpm:
+								clutchin = false
+						else:
+							if sassistdel > 0:
+								actualgear += 1
+							sassistdel = ga_shift_delay / 2
+							sassiststep = -4
+
+							clutchin = true
+							gasrestricted = true
+			elif shift_down:
+				shift_down = false
+				if gear > -1:
+					if rpm < ga_clutch_out_rpm:
+						actualgear -= 1
+					else:
+						if actualgear == 0 or actualgear == 1:
+							actualgear -= 1
+							clutchin = false
+						else:
+							if sassistdel > 0:
+								actualgear -= 1
+							sassistdel = ga_shift_delay / 2
+							sassiststep = -2
+
+							clutchin = true
+							revmatch = true
+							gasrestricted = false
+		elif ga_level == GearAssistantLevel.FULL_AUTO:
+			var assist_shift_speed = (ga_upshift_rpm / ratio) * ga_speed_influence
+			var assist_downshift_speed = (ga_downshift_rpm / abs((gear_ratios[gear - 2] * final_drive_ratio))) * ga_speed_influence
+
+			if gear == 0:
+				if gas:
+					sassistdel -= 1
+					if sassistdel < 0:
+						actualgear = 1
+				elif brake:
+					sassistdel -= 1
+					if sassistdel < 0:
+						actualgear = -1
+				else:
+					sassistdel = 144
+			elif linear_velocity.length() < 5:
+				if not gas and gear == 1 or not brake and gear == -1:
+					sassistdel = 144
+					actualgear = 0
+			if sassiststep == 0:
+				if rpm < ga_clutch_out_rpm:
+					var irga_ca = (ga_clutch_out_rpm - rpm) / (ga_clutch_out_rpm - idle_rpm)
+					pedal_controller.clutch_pedal = irga_ca * irga_ca
+					if pedal_controller.clutch_pedal > 1.0:
+						pedal_controller.clutch_pedal = 1.0
+				else:
+					clutchin = false
+				if not gear == -1:
+					if gear < len(gear_ratios) and linear_velocity.length() > assist_shift_speed:
+						sassistdel = ga_shift_delay / 2
+						sassiststep = -4
+
+						clutchin = true
+						gasrestricted = true
+					if gear > 1 and linear_velocity.length() < assist_downshift_speed:
+						sassistdel = ga_shift_delay / 2
+						sassiststep = -2
+
+						clutchin = true
+						gasrestricted = true
+						revmatch = true
+
+		if sassiststep == -4 and sassistdel < 0:
+			sassistdel = ga_shift_delay / 2
+			if gear < len(gear_ratios):
+				actualgear += 1
+			sassiststep = -3
+		elif sassiststep == -3 and sassistdel < 0:
+			if rpm > ga_clutch_out_rpm:
+				clutchin = false
+			if sassistdel < -ga_throttle_allowed:
+				sassiststep = 0
+				gasrestricted = false
+		elif sassiststep == -2 and sassistdel < 0:
+			sassiststep = 0
+			if gear > -1:
+				actualgear -= 1
+			if rpm > ga_clutch_out_rpm:
+				clutchin = false
+			gasrestricted = false
+			revmatch = false
+
+		gear = actualgear
 
 func limits():
 	pass
 
 func drivetrain():
-	pass
+	drivewheels_size = 0.0
+	for wheel in powered_wheels:
+		drivewheels_size += wheel.w_size / len(powered_wheels)
+
+	ga_speed_influence = drivewheels_size
