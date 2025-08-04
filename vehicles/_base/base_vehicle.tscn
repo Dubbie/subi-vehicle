@@ -1,0 +1,45 @@
+[gd_scene load_steps=5 format=3 uid="uid://bmrx0ppni2eb5"]
+
+[ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
+[ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
+
+[sub_resource type="Curve" id="Curve_rt677"]
+_limits = [0.0, 275.0, 0.0, 8000.0]
+_data = [Vector2(843.537, 106.415), 0.0, 0.0, 0, 0, Vector2(5088.44, 275), 0.0, 0.0, 0, 0, Vector2(7238.09, 222.937), -0.0607403, -0.0607403, 0, 0, Vector2(8000, 0), 0.0, 0.0, 0, 0]
+point_count = 4
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_rt677"]
+size = Vector3(2, 1, 4.2)
+
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller")]
+script = ExtResource("1_v55up")
+pedal_controller = NodePath("Components/PedalController")
+torque_curve = SubResource("Curve_rt677")
+
+[node name="Components" type="Node" parent="."]
+
+[node name="PedalController" type="Node" parent="Components"]
+script = ExtResource("2_rt677")
+metadata/_custom_type_script = "uid://do46hehsb6qtm"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("BoxShape3D_rt677")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Control" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="PedalDebugLabel" type="Label" parent="CanvasLayer/Control"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+text = "Throttle: 1.0
+Brake: 1.0
+Clutch: 1.0
+Handbrake: 1.0"
