@@ -55,6 +55,7 @@ var lat_force_vector: Vector3 = Vector3.ZERO
 func _ready() -> void:
 	# Calculate wheel radius based on params
 	target_position = Vector3.DOWN * (suspension_max_length + wheel_radius)
+	current_spring_length = suspension_max_length
 
 	# Calculate the wheel's moment of inertia based on its mass and radius
 	var inertia = 0.5 * wheel_mass * wheel_radius * wheel_radius
@@ -76,6 +77,14 @@ func _process(_delta: float) -> void:
 	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
 	DebugDraw3D.draw_arrow(global_position, global_position + (lat_force_vector / force_scale), Color.RED, 0.1)
 	DebugDraw3D.draw_arrow(global_position, global_position + (lon_force_vector / force_scale), Color.BLUE, 0.1)
+
+	# Cylinder should be sized based on the wheel radius and width
+	var wheel_position: Vector3 = global_position
+	wheel_position.y -= last_spring_length
+	var wheel_cylinder: Transform3D = Transform3D(Basis(Vector3.UP, PI * 0.5)
+		.rotated(Vector3.FORWARD, deg_to_rad(90))
+		.scaled(Vector3(wheel_width, wheel_radius, wheel_radius)), wheel_position)
+	DebugDraw3D.draw_cylinder(wheel_cylinder, Color.BLACK, 0.0)
 
 func update_state(p_steer_angle: float, delta: float) -> void:
 	calculate_spring_physics(p_steer_angle, delta)

@@ -48,23 +48,11 @@ target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
 suspension_rebound_damping = 2000.0
 
-[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelFL/Animation/Camber/Wheel" index="0"]
-transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
-radius = 0.316
-height = 0.205
-sides = 24
-
 [node name="WheelFR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
 suspension_rebound_damping = 2000.0
-
-[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelFR/Animation/Camber/Wheel" index="0"]
-transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
-radius = 0.316
-height = 0.205
-sides = 24
 
 [node name="WheelRL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
@@ -72,23 +60,11 @@ target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
 suspension_rebound_damping = 2000.0
 
-[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelRL/Animation/Camber/Wheel" index="0"]
-transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
-radius = 0.316
-height = 0.205
-sides = 24
-
 [node name="WheelRR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
 suspension_rebound_damping = 2000.0
-
-[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelRR/Animation/Camber/Wheel" index="0"]
-transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
-radius = 0.316
-height = 0.205
-sides = 24
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
