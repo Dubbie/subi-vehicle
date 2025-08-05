@@ -1,138 +1,89 @@
-# VehicleBody.gd
 extends RigidBody3D
 class_name VehicleBody
 
-enum GearAssistantLevel {MANUAL, SEMI_AUTO, FULL_AUTO}
+const RPM_TO_RADS = PI / 30.0
+const RADS_TO_RPM = 30.0 / PI
 
-enum TransmissionType {FULLY_MANUAL, AUTOMATIC, CVT, SEMI_AUTO}
-
+#region Ex.Variables
 # --- Components ---
 @export var pedal_controller: PedalController
 
+@export_group("Debug")
+@export var debug_mode: bool = true:
+	set(value):
+		debug_mode = value
+		for wheel in wheels:
+			wheel.debug_mode = value
+
 # --- Vehicle Configuration ---
 @export_group("Chassis")
-@export var Weight: float = 900.0 # Mass in kilograms (kg)
+@export var weight: float = 1250.0 # Mass in kilograms (kg)
+@export var wheels: Array[WheelController] = []
+@export var driven_wheels: Array[WheelController] = []
 
 @export_group("Limits")
 @export var throttle_limit: float = 0.0
 
 @export_group("Engine")
 @export var torque_curve: Curve # Assign a Curve resource in the Inspector
-@export var idle_rpm: float = 800.0
-@export var rpm_limit: float = 7000.0
-@export var dead_rpm: float = 100.0 # RPM below which the engine is considered stalled
-# Note: limiter_delay is now in seconds, not frames (e.g., 0.07)
-@export var limiter_delay: int = 12
-@export var throttle_idle: float = 0.25
-# NOTE: These values will need retuning as they are now used with 'delta'.
-@export var rev_speed: float = 20000.0 # Acts as torque->acceleration multiplier (inverse inertia)
-@export var engine_friction: float = 18000.0 # Coefficient for friction that scales with RPM^2
-@export var engine_drag: float = 1.0 # Coefficient for linear RPM drag
-@export var throttle_response: float = 15.0 # Rate of throttle change per second
-
-@export_group("Braking")
-@export var ABS_Enabled: bool = true
-# Note: ABS_Pump_Time is now in seconds, not frames (e.g., 0.02)
-@export var ABS_Pump_Time: float = 0.02
-@export var ABS_Pump_Force: float = 25.0 # Rate of brake pressure change per second
+@export var engine_inertia: float = 0.3
+@export var engine_min_rpm: float = 800.0
+@export var engine_max_rpm: float = 7000.0
+@export var engine_friction_constant: float = 0.01 # Scales friction with RPM
 
 @export_group("Drivetrain")
-@export var driveshaft_inertia_factor: float = 150.0 # Corresponds to DSWeight
-@export var differential_lock_factor: float = 0.1
-@export var diff_coast_locking: float = 0.0
-@export var diff_power_locking: float = 0.0
-@export var diff_preload: float = 0.0
-@export var diff_centre_coast_locking: float = 0.0
-@export var diff_centre_power_locking: float = 0.0
-@export var diff_centre_preload: float = 0.0
-@export var stress_factor: float = 1.0
-@export var powered_wheels: Array[WheelController]
-
 @export_group("Transmission")
-@export var transmission_type: TransmissionType = TransmissionType.FULLY_MANUAL
-@export var gear_ratios: Array[float] = [3.2, 1.894, 1.259, 1.0, 0.8]
-@export var reverse_ratio: float = 3.0
-@export var final_drive_ratio: float = 3.694
-@export var gear_gap: float = 60.0
+@export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
+@export var final_drive_ratio: float = 3.42 # The differential
 
 @export_group("Clutch")
-@export var clutch_grip_torque: float = 400.0
-@export var clutch_stability_factor: float = 0.5
-@export var clutch_elasticity: float = 0.5
-@export var clutch_wobble: float = 0.0
-@export var clutch_wobble_rate: float = 0.0
-@export var clutch_float_reduction: float = 20.0
-@export var clutch_gear_ratio_ratio_threshold: float = 200.0
-@export var clutch_threshold_stable: float = 0.0
+@export var clutch_stiffness: float = 10.0 # How sharply the clutch "bites"
+@export var clutch_capacity: float = 1.2 # Multiplier for max torque transfer
 
-@export_group("Gear Assistant")
-## The shift delay, in frames
-@export var ga_shift_delay: float = 50
-## Assistance level
-@export var ga_level: GearAssistantLevel = GearAssistantLevel.FULL_AUTO
-## Downshift rpm iteration
-@export var ga_downshift_rpm: float = 6000.0
-## Upshift rpm iteration
-@export var ga_upshift_rpm: float = 6200.0
-## Clutch out RPM
-@export var ga_clutch_out_rpm: float = 3000.0
-## Throttle input allowed after shifting delay (in frames)
-@export var ga_throttle_allowed: int = 5
+@export_group("Brakes")
+@export var max_brake_torque: float = 2000.0
+#endregion
 
-# --- Internal Physics State (Class-Level Variables) ---
-var throttle: float = 0.0
-var rpm: float = 0.0
-var rpmcs: float = 0.0
-var wob: float = 0.0
-var rpmforce: float = 0.0 # The net rotational acceleration on the engine (in RPM/sec)
-var gear: int = 0
-var currentstable: float = 0.0
-var drivetrain_resistance: float = 0.0 # Total resistance from wheels fed back to the engine.
-var ratio: float = 0.0
-var stalled: float = 0.0
-var gearstress: float = 0.0
-var drivewheels_size: float = 0.0
-var ds_weight: float = 0.0 # Excuse me what?
-var dsweight: float = 0.0 # Excuse me what?
-var dsweightrun: float = 0.0
-var diff_locked: float = 0.0
-var diff_center_locked: float = 0.0
-var wv_difference: float = 0.0
-var dist: float = 0.0
-var stress: float = 0.0
-
-var local_velocity: Vector3 = Vector3.ZERO
-var local_angular_velocity: Vector3 = Vector3.ZERO
-
-var limdel: int = 0 # Timer for the rev limiter
-var sassistdel: float = 0 # Timer for the shift assist
-var sassiststep: int = 0
-var ga_speed_influence: float = 0.0
-var actualgear: int = 0
-var gasrestricted: bool = false
-var clutchin: bool = false
-var revmatch: bool = false
-
-var shift_up: bool = false
-var shift_down: bool = false
-
-var past_velocity: Vector3 = Vector3.ZERO
-var g_force: Vector3 = Vector3.ZERO
-
-var brakeline: float = 0.0
-var brake_allowed: float = 1.0
-var abs_pump_timer: float = 0.0
-
-const GRAVITY_ACCELERATION: float = 9.80665
-
+#region Internal
+var engine_angular_velocity: float = 0.0 # rad/s
+var engine_rpm: float = 0.0
+var clutch_torque: float = 0.0 # The final torque passed to the wheels
+var gear_index: int = 1 # Start in Neutral
+var current_gear: int = 0 # For UI/sound display
+#endregion
 
 func _ready():
-	mass = Weight
-	rpm = idle_rpm
+	mass = weight
+	engine_rpm = engine_min_rpm
 
 # The main physics loop. All time-dependent calculations now use the 'delta' parameter.
 func _physics_process(delta: float):
 	controls(delta)
+
+	var average_drive_wheel_rpm: float = 0.0
+	for wheel in driven_wheels:
+		average_drive_wheel_rpm += wheel.current_angular_velocity * RADS_TO_RPM
+	average_drive_wheel_rpm /= driven_wheels.size()
+
+	for wheel in wheels:
+		wheel.update_state(0.0, delta)
+
+	# Calculate gearbox RPM based on wheel speed and gear ratios
+	var current_gear_ratio = gear_ratios[gear_index]
+	var gearbox_rpm = average_drive_wheel_rpm * current_gear_ratio * final_drive_ratio
+
+	# Update the drivetrain simulation
+	update_drivetrain(pedal_controller.throttle_pedal, pedal_controller.brake_pedal, gearbox_rpm, false, delta)
+
+	var final_brake_torque: float = pedal_controller.brake_pedal * max_brake_torque
+
+	for wheel in wheels:
+		var drive_torque: float = 0.0
+		if wheel in driven_wheels:
+			drive_torque = clutch_torque / driven_wheels.size()
+
+		wheel.calculate_wheel_physics(drive_torque, final_brake_torque, 1.0, delta)
+		wheel.apply_forces_to_rigidbody()
 
 func controls(d: float):
 	var gas_input = Input.is_action_pressed("gas")
@@ -141,3 +92,57 @@ func controls(d: float):
 	var clutch_input = Input.is_action_pressed("clutch")
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
+
+func update_drivetrain(throttle_input: float, brake_input: float, p_gearbox_rpm: float, is_reverse: bool, delta: float):
+	# Convert engine's angular velocity to the more readable RPM format
+	engine_rpm = engine_angular_velocity * RADS_TO_RPM
+
+	# Sample the curve to get the max potential torque at the current RPM
+	var initial_torque = torque_curve.sample(engine_rpm)
+	# Apply the player's throttle input
+	initial_torque *= throttle_input
+
+	# Calculate engine friction
+	var friction_torque = engine_friction_constant * engine_angular_velocity
+
+	# This line was provided. It's the net torque available to accelerate the engine.
+	var engine_effective_torque = initial_torque - friction_torque - clutch_torque
+
+	# Calculate engine acceleration using its inertia
+	var engine_acceleration = engine_effective_torque / engine_inertia
+	engine_angular_velocity += engine_acceleration * delta
+
+	# Clamp the engine speed between idle and redline
+	var engine_min_ang_vel = engine_min_rpm * RPM_TO_RADS
+	var engine_max_ang_vel = engine_max_rpm * RPM_TO_RADS
+	engine_angular_velocity = clamp(engine_angular_velocity, engine_min_ang_vel, engine_max_ang_vel)
+
+	# --- CLUTCH LOGIC ---
+	var clutch_lock = 1.0 # Assume clutch is fully locked
+	# Disengage clutch at low RPM in Neutral/Reverse/1st to prevent stalls
+	if (is_reverse or gear_index <= 2) and engine_rpm < (engine_min_rpm + 1500.0):
+		clutch_lock = 0.0
+	# Disengage clutch if player is braking (arcade helper)
+	if brake_input > 0.5:
+		clutch_lock = 0.0
+
+	# Calculate the speed difference between the engine and the drivetrain
+	var clutch_slip_velocity = engine_angular_velocity - (p_gearbox_rpm * RPM_TO_RADS)
+
+	# Calculate the maximum torque the clutch can handle
+	# The curve's max value is a good proxy for engineTorqueMax
+	var clutch_torque_max = torque_curve.get_max_value() * clutch_capacity * clutch_lock
+
+	# Calculate the torque transferred by the clutch based on slip and stiffness
+	var clutch_torque_next = clamp(clutch_slip_velocity * clutch_stiffness, -clutch_torque_max, clutch_torque_max)
+
+	# Smooth the clutch torque to avoid jerky behavior (a simple low-pass filter)
+	clutch_torque_next = lerp(clutch_torque, clutch_torque_next, 0.05)
+	clutch_torque = clutch_torque_next
+
+	# --- GEAR DISPLAY LOGIC ---
+	current_gear = gear_index - 1 # Convert array index to gear number (N=0, 1st=1)
+	if is_reverse:
+		current_gear = -1
+	if clutch_lock == 0.0:
+		current_gear = 0 # Show "Neutral" if clutch is disengaged

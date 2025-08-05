@@ -18,6 +18,7 @@ extends RayCast3D
 #endregion
 
 #region Internal
+var debug_mode: bool = true
 var last_spring_length: float = 0.0
 var current_spring_length: float = 0.0
 var has_contact: bool = false
@@ -67,17 +68,17 @@ func _ready() -> void:
 
 	add_exception(car)
 
-#region Physics
-func _physics_process(delta: float) -> void:
-	calculate_spring_physics(0.0, delta)
-	calculate_wheel_physics(100.0, 0.0, 1.0, delta)
+func _process(_delta: float) -> void:
+	if not debug_mode: return
 
-	# Apply the force now
-	car.apply_force(load_force_vector, global_position - car.global_position)
-	car.apply_force(lon_force_vector, global_position - car.global_position)
-	car.apply_force(lat_force_vector, global_position - car.global_position)
+	var force_scale: float = car.mass
+	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
+	DebugDraw3D.draw_arrow(global_position, global_position + (lat_force_vector / force_scale), Color.RED, 0.1)
+	DebugDraw3D.draw_arrow(global_position, global_position + (lon_force_vector / force_scale), Color.BLUE, 0.1)
 
-#endregion
+func update_state(p_steer_angle: float, delta: float) -> void:
+	calculate_spring_physics(p_steer_angle, delta)
+
 func calculate_spring_physics(steer_angle: float, delta: float) -> void:
 	has_contact = is_colliding()
 	_update_spring(delta)
@@ -233,6 +234,17 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	# Save final world-space force vectors
 	lon_force_vector = contact_forward * local_force.z
 	lat_force_vector = contact_right * local_force.x
+
+func apply_forces_to_rigidbody():
+	if not has_contact:
+		return
+
+	# Combine the lateral and longitudinal forces
+	var total_force = lat_force_vector + lon_force_vector
+
+	# Apply the force at the wheel's position for realistic physics
+	var force_position = global_position - car.global_position
+	car.apply_force(total_force, force_position)
 
 func _calc_lat_slip(v_long: float, v_lat: float) -> float:
 	# No sideways velocity => no slip
