@@ -46,25 +46,21 @@ mesh = SubResource("BoxMesh_6w078")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-suspension_rebound_damping = 2000.0
 
 [node name="WheelFR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-suspension_rebound_damping = 2000.0
 
 [node name="WheelRL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-suspension_rebound_damping = 2000.0
 
 [node name="WheelRR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-suspension_rebound_damping = 2000.0
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
