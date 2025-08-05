@@ -12,12 +12,8 @@ extends RayCast3D
 @export var suspension_damping: float = 1350.0 # Damping force in Ns/m
 @export var suspension_max_length: float = 0.21 # Max travel distance in meters
 
-@export_group("Grip and Stiffness")
-@export var muk: float = 0.9 # Coefficient of friction
-@export var longitudinal_stiffness: float = 40000.0 # Stiffness in the direction of rolling
-@export var lateral_stiffness: float = 30000.0 # Cornering stiffness
-@export var relaxation_length: float = 0.2 # Distance in meters for forces to build up
-
+@export_group("Tire Model")
+@export var tire_model: BaseTireModel
 #endregion
 
 #region Internal
@@ -47,8 +43,6 @@ var drive_torque: float = 0.0
 # Slip and bristle deflection for the brush model
 var lon_slip: float = 0.0
 var lat_slip: float = 0.0
-var longitudinal_deflection: float = 0.0
-var lateral_deflection: float = 0.0
 
 var smoothed_lon_slip: float = 0.0
 #endregion
@@ -203,53 +197,37 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	else:
 		current_angular_velocity -= sign(current_angular_velocity) * w_brake
 
-	# Brush Model Implementation
+	# --- Tire Force Calculation ---
+	var tire_forces = Vector2.ZERO
 	if has_contact:
 		var surface_speed = current_angular_velocity * wheel_radius
-		var slip_velocity_lon = surface_speed - contact_lon_velocity
-		var slip_velocity_lat = - contact_lat_velocity
 
-		# Update bristle deflection based on slip and relaxation length
-		var relaxation_factor_lon = (abs(contact_lon_velocity) / relaxation_length) if relaxation_length > 0 else 0
-		longitudinal_deflection += (slip_velocity_lon - relaxation_factor_lon * longitudinal_deflection) * delta
-
-		var relaxation_factor_lat = (abs(contact_lon_velocity) / relaxation_length) if relaxation_length > 0 else 0
-		lateral_deflection += (slip_velocity_lat - relaxation_factor_lat * lateral_deflection) * delta
-
-		# Calculate forces from bristle deflection and stiffness
-		local_force.z = longitudinal_deflection * longitudinal_stiffness
-		local_force.x = lateral_deflection * lateral_stiffness
-
-		# Update slip ratios for debugging/external use
+		# Calculate slip values
+		# Longitudinal Slip Ratio (a dimensionless number)
 		lon_slip = (surface_speed - contact_lon_velocity) / max(abs(contact_lon_velocity), 0.1)
-		lat_slip = atan2(contact_lat_velocity, contact_lon_velocity)
-
 		smoothed_lon_slip = lerp(smoothed_lon_slip, lon_slip, 0.1)
-	else:
-		local_force.z = 0.0
-		local_force.x = 0.0
-		longitudinal_deflection = 0.0
-		lateral_deflection = 0.0
-		lon_slip = 0.0
-		lat_slip = 0.0
 
-		smoothed_lon_slip = 0.0
+		# Lateral Slip Angle (in radians)
+		lat_slip = atan2(-contact_lat_velocity, abs(contact_lon_velocity))
 
-	# Combine forces and limit to friction circle
-	var max_friction_force = local_force.y * (muk * dyn_muk)
-	var combined_force_sq = local_force.z * local_force.z + local_force.x * local_force.x
+		# --- DELEGATE TO THE TIRE MODEL ---
+		# Bundle up all the data the tire model needs
+		var model_params = TireParams.new()
+		model_params.vertical_load = local_force.y
+		model_params.lon_slip_ratio = lon_slip
+		model_params.lat_slip_angle_rad = lat_slip
+		model_params.surface_friction = dyn_muk # Pass dynamic friction
+		model_params.longitudinal_velocity = contact_lon_velocity
+		model_params.delta = delta
 
-	if combined_force_sq > max_friction_force * max_friction_force and combined_force_sq > 0:
-		var force_scale = max_friction_force / sqrt(combined_force_sq)
-		local_force.z *= force_scale
-		local_force.x *= force_scale
+		# Call the model to get the forces
+		tire_forces = tire_model.calculate_forces(model_params)
 
-		# Adjust deflection to match the scaled force
-		longitudinal_deflection = local_force.z / longitudinal_stiffness
-		lateral_deflection = local_force.x / lateral_stiffness
+	# Assign the calculated forces
+	local_force.x = tire_forces.x # Lateral force
+	local_force.z = tire_forces.y # Longitudinal force
 
-
-	# Apply traction force from the road back to the wheel
+	# Correctly apply traction force back to the wheel
 	var t_traction = local_force.z * wheel_radius
 	var w_traction = t_traction * inertia_inverse * delta
 	current_angular_velocity -= w_traction
