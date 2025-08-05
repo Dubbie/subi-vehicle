@@ -21,8 +21,10 @@ const RADS_TO_RPM = 30.0 / PI
 @export var wheels: Array[WheelController] = []
 @export var driven_wheels: Array[WheelController] = []
 
-@export_group("Limits")
-@export var throttle_limit: float = 0.0
+@export_group("Clutch Configuration")
+@export var clutch_input_curve: Curve
+@export var launch_assist_max_speed: float = 5.0
+@export var launch_assist_factor: float = 1.3
 
 @export_group("Engine")
 @export var torque_curve: Curve # Assign a Curve resource in the Inspector
@@ -94,7 +96,7 @@ func _physics_process(delta: float):
 	var gearbox_rpm = average_drive_wheel_rpm * current_gear_ratio * final_drive_ratio
 
 	# Update the drivetrain simulation
-	update_drivetrain(pedal_controller.throttle_pedal, pedal_controller.brake_pedal, gearbox_rpm, false, delta)
+	update_drivetrain(gearbox_rpm, false, delta)
 
 	var final_brake_torque: float = pedal_controller.brake_pedal * max_brake_torque
 
@@ -117,70 +119,74 @@ func controls(d: float):
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
 
-func update_drivetrain(throttle_input: float, brake_input: float, p_gearbox_rpm: float, is_reverse: bool, delta: float):
-	# Convert engine's angular velocity to the more readable RPM format
+func update_drivetrain(p_gearbox_rpm: float, is_reverse: bool, delta: float):
+	# --- GET INPUTS FROM PEDAL CONTROLLER ---
+	var throttle_input = pedal_controller.get_throttle()
+
+	# --- 1. ENGINE PHYSICS (Unchanged) ---
 	engine_rpm = engine_angular_velocity * RADS_TO_RPM
 
-	# Sample the curve to get the max potential torque at the current RPM
-	var initial_torque = torque_curve.sample(engine_rpm)
-	# Apply the player's throttle input
-	initial_torque *= throttle_input
-
-	# Calculate engine friction
+	var initial_torque = torque_curve.sample(engine_rpm) * throttle_input
 	var friction_torque = engine_friction_constant * engine_angular_velocity
-
-	# This line was provided. It's the net torque available to accelerate the engine.
 	var engine_effective_torque = initial_torque - friction_torque - clutch_torque
 
-	# Calculate engine acceleration using its inertia
 	var engine_acceleration = engine_effective_torque / engine_inertia
 	engine_angular_velocity += engine_acceleration * delta
 
-	# Clamp the engine speed between idle and redline
 	var engine_min_ang_vel = engine_min_rpm * RPM_TO_RADS
 	var engine_max_ang_vel = engine_max_rpm * RPM_TO_RADS
 	engine_angular_velocity = clamp(engine_angular_velocity, engine_min_ang_vel, engine_max_ang_vel)
 
-	# --- CLUTCH LOGIC ---
-	var clutch_lock = 1.0 # Default to locked for higher gears/speeds
+	# --- 2. CLUTCH LOGIC ---
+	# This new function calculates the final clutch engagement value based on all factors.
+	var final_clutch_engagement = _get_final_clutch_engagement(throttle_input)
 
-	# Define the RPM range for clutch engagement in low gears
-	var engagement_start_rpm = engine_min_rpm # e.g., 800 RPM
-	var engagement_end_rpm = engine_min_rpm + 1500.0 # e.g., 2300 RPM
+	# The engagement value is passed through the curve to get the actual lock factor.
+	var clutch_lock = clutch_input_curve.sample_baked(final_clutch_engagement)
 
-	# In low gears, calculate a smooth engagement factor
-	if is_reverse or gear_index <= 2:
-		# inverse_lerp calculates how far we are into the range (0.0 to 1.0)
-		var engagement_factor = inverse_lerp(engagement_start_rpm, engagement_end_rpm, engine_rpm)
-		clutch_lock = clamp(engagement_factor, 0.0, 1.0)
+	if randf() < 0.1:
+		print("Clutch lock: ", clutch_lock)
 
-	# Disengage clutch if player is braking (arcade helper)
-	if brake_input > 0.5:
-		clutch_lock = 0.0
-
-	# Disengage clutch if vehicle is airborn
-	if not grounded:
-		clutch_lock = 0.0
-
-	# Calculate the speed difference between the engine and the drivetrain
+	# --- 3. CLUTCH PHYSICS (Unchanged) ---
 	var clutch_slip_velocity = engine_angular_velocity - (p_gearbox_rpm * RPM_TO_RADS)
-
-	# Calculate the maximum torque the clutch can handle
-	# The curve's max value is a good proxy for engineTorqueMax
 	var clutch_torque_max = torque_curve.get_max_value() * clutch_capacity * clutch_lock
-
-	# Calculate the torque transferred by the clutch based on slip and stiffness
 	var clutch_torque_next = clamp(clutch_slip_velocity * clutch_stiffness, -clutch_torque_max, clutch_torque_max)
 
-	clutch_torque_next *= clutch_lock
+	clutch_torque = lerp(clutch_torque, clutch_torque_next, 0.5)
 
-	# Smooth the clutch torque to avoid jerky behavior (a simple low-pass filter)
-	clutch_torque_next = lerp(clutch_torque, clutch_torque_next, 0.5)
-	clutch_torque = clutch_torque_next
-
-	# --- GEAR DISPLAY LOGIC ---
-	current_gear = gear_index - 1 # Convert array index to gear number (N=0, 1st=1)
+	# --- 4. GEAR DISPLAY LOGIC (Unchanged) ---
+	current_gear = gear_index - 1
 	if is_reverse:
 		current_gear = -1
-	if clutch_lock == 0.0:
-		current_gear = 0 # Show "Neutral" if clutch is disengaged
+	if clutch_lock < 0.1:
+		current_gear = 0
+
+func _get_final_clutch_engagement(throttle: float) -> float:
+	# Get manual input from the player's foot
+	var manual_clutch_pedal = pedal_controller.get_clutch()
+
+	# Priority 1: Manual Override. If the player is pressing the clutch, they are in control.
+	if manual_clutch_pedal > 0.01:
+		# get_clutch() is 1.0 when pressed, so we invert it for engagement.
+		return 1.0 - manual_clutch_pedal
+
+	# If no manual input, the "Driver AI" takes over.
+	var car_speed = abs(linear_velocity.dot(basis.z))
+
+	# Priority 2: Airborne check
+	if not grounded:
+		return 0.0 # Disengage
+
+	# Priority 3: Launch Assist
+	# Check for low speed and throttle application.
+	if car_speed < launch_assist_max_speed and throttle > 0.01:
+		# Slip the clutch based on throttle input for a smooth launch.
+		return clamp(throttle * launch_assist_factor, 0.0, 1.0)
+
+	# Priority 4: Anti-Stall
+	# Check for coasting to a stop.
+	if car_speed < 5.0 and throttle < 0.01:
+		return 0.0 # Disengage
+
+	# Default State: If none of the above conditions are met, the clutch should be fully engaged.
+	return 1.0
