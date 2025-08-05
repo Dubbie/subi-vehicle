@@ -64,4 +64,4 @@ shift_down={
 
 [physics]
 
-common/physics_ticks_per_second=144
+common/physics_ticks_per_second=240

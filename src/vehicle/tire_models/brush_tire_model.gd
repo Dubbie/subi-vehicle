@@ -1,10 +1,10 @@
 class_name BrushTireModel
 extends BaseTireModel
 
-@export var coefficient_of_friction: float = 1.2
-@export var lateral_stiffness_factor: float = 20.0
-@export var longitudinal_stiffness_factor: float = 10.0
-@export var relaxation_length: float = 0.3
+@export var coefficient_of_friction: float = 0.9
+@export var lateral_stiffness_factor: float = 18.0
+@export var longitudinal_stiffness_factor: float = 16.0
+@export var relaxation_length: float = 0.15
 
 # Bristle deflection state must be stored here!
 # Each wheel will have its own instance of this model, with its own state.

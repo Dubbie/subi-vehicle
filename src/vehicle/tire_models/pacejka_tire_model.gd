@@ -6,8 +6,8 @@ extends BaseTireModel
 @export var force_smoothing_speed: float = 70.0
 
 @export_group("Low Speed Damping")
-@export var low_speed_damping_threshold: float = 3.0
-@export var min_damping_factor: float = 0.1
+@export var low_speed_damping_threshold: float = 1.0
+@export var min_damping_factor: float = 0.01
 
 @export_group("Lateral Force (Cornering)")
 @export var lat_b: float = 10.0

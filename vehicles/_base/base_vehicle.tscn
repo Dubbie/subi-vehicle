@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
 [ext_resource type="PackedScene" uid="uid://c5wn8h36ysels" path="res://vehicles/_base/base_wheel.tscn" id="3_6w078"]
-[ext_resource type="Script" uid="uid://ddcg5iyi6pqj" path="res://src/vehicle/tire_models/pacejka_tire_model.gd" id="4_lavjc"]
+[ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="4_lavjc"]
 
 [sub_resource type="Curve" id="Curve_rt677"]
 _limits = [0.0, 275.0, 0.0, 8000.0]
@@ -16,57 +16,37 @@ size = Vector3(1.8, 1, 4.2)
 [sub_resource type="BoxMesh" id="BoxMesh_6w078"]
 size = Vector3(1.8, 1, 4.2)
 
+[sub_resource type="Resource" id="Resource_lavjc"]
+script = ExtResource("4_lavjc")
+coefficient_of_friction = 0.9
+lateral_stiffness_factor = 18.0
+longitudinal_stiffness_factor = 16.0
+relaxation_length = 0.15
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
+
 [sub_resource type="Resource" id="Resource_o7ea4"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
-force_smoothing_speed = 70.0
-low_speed_damping_threshold = 3.0
-min_damping_factor = 0.1
-lat_b = 10.0
-lat_c = 1.9
-lat_e = 0.97
-lon_b = 12.0
-lon_c = 1.7
-lon_e = 1.0
+lateral_stiffness_factor = 18.0
+longitudinal_stiffness_factor = 16.0
+relaxation_length = 0.15
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [sub_resource type="Resource" id="Resource_pto0k"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
-force_smoothing_speed = 70.0
-low_speed_damping_threshold = 3.0
-min_damping_factor = 0.1
-lat_b = 10.0
-lat_c = 1.9
-lat_e = 0.97
-lon_b = 12.0
-lon_c = 1.7
-lon_e = 1.0
+lateral_stiffness_factor = 18.0
+longitudinal_stiffness_factor = 16.0
+relaxation_length = 0.15
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [sub_resource type="Resource" id="Resource_g7wwp"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
-force_smoothing_speed = 70.0
-low_speed_damping_threshold = 3.0
-min_damping_factor = 0.1
-lat_b = 10.0
-lat_c = 1.9
-lat_e = 0.97
-lon_b = 12.0
-lon_c = 1.7
-lon_e = 1.0
-
-[sub_resource type="Resource" id="Resource_8g4xo"]
-script = ExtResource("4_lavjc")
-coefficient_of_friction = 0.9
-force_smoothing_speed = 70.0
-low_speed_damping_threshold = 3.0
-min_damping_factor = 0.1
-lat_b = 10.0
-lat_c = 1.9
-lat_e = 0.97
-lon_b = 12.0
-lon_c = 1.7
-lon_e = 1.0
+lateral_stiffness_factor = 18.0
+longitudinal_stiffness_factor = 16.0
+relaxation_length = 0.15
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "wheels", "driven_wheels")]
 script = ExtResource("1_v55up")
@@ -99,25 +79,25 @@ mesh = SubResource("BoxMesh_6w078")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-tire_model = SubResource("Resource_o7ea4")
+tire_model = SubResource("Resource_lavjc")
 
 [node name="WheelFR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-tire_model = SubResource("Resource_pto0k")
+tire_model = SubResource("Resource_o7ea4")
 
 [node name="WheelRL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-tire_model = SubResource("Resource_g7wwp")
+tire_model = SubResource("Resource_pto0k")
 
 [node name="WheelRR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
 suspension_stiffness = 27000.0
-tire_model = SubResource("Resource_8g4xo")
+tire_model = SubResource("Resource_g7wwp")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
