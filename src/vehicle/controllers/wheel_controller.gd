@@ -76,8 +76,7 @@ func _update_spring(delta: float) -> void:
 		var spring_speed = (last_spring_length - current_spring_length) / delta
 		var damper_force = suspension_damping * spring_speed
 
-		# --- Total Suspension Force ---
-		# The force is applied in the direction of the raycast (local up)
+		# --- Suspension Force ---
 		var suspension_force = max(0.0, spring_force + damper_force)
 
 		local_force.y = suspension_force
@@ -92,7 +91,7 @@ func _update_spring(delta: float) -> void:
 func _update_knuckle(steer_angle: float) -> void:
  	# Rotate the wheel's basis around its local UP axis by the steer angle.
 	# basis.x is the local "right" vector.
-	# basis.z is the local "forward" vector (negative because of Godot's convention).
+	# basis.z is the local "forward" vector.
 	var rotated_basis = basis.rotated(Vector3.UP, deg_to_rad(steer_angle))
 
 	# Store the world-space directions of the wheel.
