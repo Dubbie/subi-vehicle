@@ -50,6 +50,8 @@ var engine_rpm: float = 0.0
 var clutch_torque: float = 0.0 # The final torque passed to the wheels
 var gear_index: int = 2 # Start in Neutral
 var current_gear: int = 0 # For UI/sound display
+## Needed for clutch logic in air
+var grounded: bool = false
 #endregion
 
 @onready var engine_label: Label = %EngineLabel
@@ -80,8 +82,12 @@ func _physics_process(delta: float):
 		wheel.driven_wheel = true
 	average_drive_wheel_rpm /= driven_wheels.size()
 
+	grounded = false
 	for wheel in wheels:
 		wheel.update_state(0.0, delta)
+
+		if wheel.has_contact and not grounded:
+			grounded = true
 
 	# Calculate gearbox RPM based on wheel speed and gear ratios
 	var current_gear_ratio = gear_ratios[gear_index]
@@ -150,6 +156,10 @@ func update_drivetrain(throttle_input: float, brake_input: float, p_gearbox_rpm:
 
 	# Disengage clutch if player is braking (arcade helper)
 	if brake_input > 0.5:
+		clutch_lock = 0.0
+
+	# Disengage clutch if vehicle is airborn
+	if not grounded:
 		clutch_lock = 0.0
 
 	# Calculate the speed difference between the engine and the drivetrain
