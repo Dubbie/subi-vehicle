@@ -24,6 +24,7 @@ var current_spring_length: float = 0.0
 var has_contact: bool = false
 var inertia_inverse: float = 0.1
 var delta_rotation: float = 0.0
+var driven_wheel: bool = false
 
 var knuckle_forward: Vector3 = Vector3.ZERO
 var knuckle_right: Vector3 = Vector3.ZERO
@@ -49,7 +50,7 @@ var lat_force_vector: Vector3 = Vector3.ZERO
 #endregion
 
 # --- Node References ---
-@onready var car: VehicleBody = get_owner()
+@onready var car: VehicleController = get_owner()
 
 func _ready() -> void:
 	# Calculate wheel radius based on params
@@ -240,7 +241,7 @@ func apply_forces_to_rigidbody():
 		return
 
 	# Combine the lateral and longitudinal forces
-	var total_force = lat_force_vector + lon_force_vector
+	var total_force = lat_force_vector + lon_force_vector + load_force_vector
 
 	# Apply the force at the wheel's position for realistic physics
 	var force_position = global_position - car.global_position
