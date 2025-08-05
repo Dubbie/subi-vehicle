@@ -46,19 +46,8 @@ mesh = SubResource("BoxMesh_6w078")
 [node name="WheelFL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
-wheel_mass_kg = 18.0
-tyre_width_mm = 205.0
-tyre_aspect_ratio = 55.0
-rim_diameter_inches = 16.0
-tyre_pressure_psi = 32.0
-suspension_stiffness = 42000.0
-suspension_damping = 4000.0
-suspension_rebound_damping = 4600.0
-suspension_max_travel = 0.22
-brake_torque = 6500.0
-camber_degrees = -0.8
-caster_degrees = 7.0
-toe_degrees = 0.05
+suspension_stiffness = 27000.0
+suspension_rebound_damping = 1600.0
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelFL/Animation/Camber/Wheel" index="0"]
 transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
@@ -69,19 +58,8 @@ sides = 24
 [node name="WheelFR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
 target_position = Vector3(0, -0.4, 0)
-wheel_mass_kg = 18.0
-tyre_width_mm = 205.0
-tyre_aspect_ratio = 55.0
-rim_diameter_inches = 16.0
-tyre_pressure_psi = 32.0
-suspension_stiffness = 42000.0
-suspension_damping = 4000.0
-suspension_rebound_damping = 4600.0
-suspension_max_travel = 0.22
-brake_torque = 6500.0
-camber_degrees = -0.8
-caster_degrees = 7.0
-toe_degrees = 0.05
+suspension_stiffness = 27000.0
+suspension_rebound_damping = 1600.0
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelFR/Animation/Camber/Wheel" index="0"]
 transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
@@ -92,22 +70,8 @@ sides = 24
 [node name="WheelRL" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
-is_steering_wheel = false
-power_bias = 0.5
-brake_bias = 0.6
-handbrake_bias = 1.0
-wheel_mass_kg = 18.0
-tyre_width_mm = 205.0
-tyre_aspect_ratio = 55.0
-rim_diameter_inches = 16.0
-tyre_pressure_psi = 32.0
-suspension_stiffness = 35000.0
+suspension_stiffness = 21000.0
 suspension_rebound_damping = 4000.0
-suspension_max_travel = 0.24
-brake_torque = 3800.0
-camber_degrees = -1.2
-caster_degrees = 0.0
-toe_degrees = -0.1
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelRL/Animation/Camber/Wheel" index="0"]
 transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
@@ -118,22 +82,8 @@ sides = 24
 [node name="WheelRR" parent="Wheels" instance=ExtResource("3_6w078")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
 target_position = Vector3(0, -0.4, 0)
-is_steering_wheel = false
-power_bias = 0.5
-brake_bias = 0.6
-handbrake_bias = 1.0
-wheel_mass_kg = 18.0
-tyre_width_mm = 205.0
-tyre_aspect_ratio = 55.0
-rim_diameter_inches = 16.0
-tyre_pressure_psi = 32.0
-suspension_stiffness = 35000.0
+suspension_stiffness = 21000.0
 suspension_rebound_damping = 4000.0
-suspension_max_travel = 0.24
-brake_torque = 3800.0
-camber_degrees = -1.2
-caster_degrees = 0.0
-toe_degrees = -0.1
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Wheels/WheelRR/Animation/Camber/Wheel" index="0"]
 transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
