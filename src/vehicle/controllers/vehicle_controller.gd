@@ -20,6 +20,9 @@ const RADS_TO_RPM = 30.0 / PI
 @export var weight: float = 1250.0 # Mass in kilograms (kg)
 @export var wheels: Array[WheelController] = []
 @export var driven_wheels: Array[WheelController] = []
+@export var axles: Array[AxleController] = []
+@export var turn_diameter: float = 10.4 # m
+@export var max_steer_angle: float = 38.0 # degrees
 
 @export_group("Clutch Configuration")
 @export var clutch_input_curve: Curve
@@ -43,7 +46,8 @@ const RADS_TO_RPM = 30.0 / PI
 @export var clutch_capacity: float = 1.2 # Multiplier for max torque transfer
 
 @export_group("Brakes")
-@export var max_brake_torque: float = 2000.0
+@export var max_brake_torque: float = 4000.0
+@export var max_handbrake_torque: float = 2000.0
 #endregion
 
 #region Internal
@@ -54,6 +58,10 @@ var gear_index: int = 2 # Start in Neutral
 var current_gear: int = 0 # For UI/sound display
 ## Needed for clutch logic in air
 var grounded: bool = false
+## Calculated wheelbase from the axles
+var wheelbase: float = 0.0 # m
+## Min turn radius calculated from axle setup
+var min_turn_radius: float = 0.0
 #endregion
 
 @onready var engine_label: Label = %EngineLabel
@@ -61,6 +69,8 @@ var grounded: bool = false
 func _ready():
 	mass = weight
 	engine_rpm = engine_min_rpm
+
+	_setup_axles()
 
 func _process(_delta: float) -> void:
 	if debug_mode and not engine_label.visible:
@@ -190,3 +200,38 @@ func _get_final_clutch_engagement(throttle: float) -> float:
 
 	# Default State: If none of the above conditions are met, the clutch should be fully engaged.
 	return 1.0
+
+func _setup_axles() -> void:
+	# --- 1. VALIDATE AXLE SETUP ---
+	# We need at least a front and a rear axle to define a wheelbase.
+	if axles.size() < 2:
+		push_error("Vehicle requires at least 2 axles to calculate wheelbase.")
+		return
+
+	# The front axle is always the first.
+	var front_axle_z = axles[0].z_offset
+	var rear_axle_z = axles[axles.size() - 1].z_offset
+
+	# The distance between the front and rear axles.
+	wheelbase = abs(front_axle_z - rear_axle_z)
+
+	if wheelbase < 0.01:
+		push_error("Wheelbase is nearly zero. Check axle z_offsets.")
+		return
+
+	# Calculate the tightest turning radius based on physics
+	var max_steer_rad = deg_to_rad(max_steer_angle)
+	if abs(tan(max_steer_rad)) < 0.0001:
+		min_turn_radius = 10000 # Effectively straight
+	else:
+		min_turn_radius = wheelbase / tan(max_steer_rad)
+
+	# Update the turn_diameter for debugging/UI purposes
+	turn_diameter = min_turn_radius * 2.0
+	print("Calculated Wheelbase: ", wheelbase, " m")
+	print("Calculated Min Turn Radius: ", min_turn_radius, " m")
+	print("Calculated Turn Diameter: ", turn_diameter, " m")
+
+	# Initialize the axles
+	for axle in axles:
+		axle.initialize(wheelbase, min_turn_radius)

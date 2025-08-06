@@ -1,19 +1,16 @@
 class_name WheelController
 extends RayCast3D
 
-#region Export
-@export_group("Wheel Setup")
-@export var wheel_radius: float = 0.316 # meters
-@export var wheel_mass: float = 18.0 # kg
-@export var wheel_width: float = 0.18 # meters
+#region Config
+var wheel_radius: float = 0.316 # meters
+var wheel_mass: float = 18.0 # kg
+var wheel_width: float = 0.18 # meters
 
-@export_group("Suspension")
-@export var suspension_stiffness: float = 25000.0 # Spring force in Newtons per meter (N/m)
-@export var suspension_damping: float = 1350.0 # Damping force in Ns/m
-@export var suspension_max_length: float = 0.21 # Max travel distance in meters
+var suspension_stiffness: float = 25000.0 # Spring force in Newtons per meter (N/m)
+var suspension_damping: float = 1350.0 # Damping force in Ns/m
+var suspension_max_length: float = 0.21 # Max travel distance in meters
 
-@export_group("Tire Model")
-@export var tire_model: BaseTireModel
+var tire_model: BaseTireModel
 #endregion
 
 #region Internal
