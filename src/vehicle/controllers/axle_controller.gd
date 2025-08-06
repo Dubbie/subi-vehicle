@@ -90,9 +90,6 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 	# Calculate the corresponding max angle for the outer wheel (will also be in radians).
 	_max_angle_outer_rad = atan(_wheelbase / radius_at_outer_wheel)
 
-	print("Max angle outer rad: ", _max_angle_outer_rad)
-	print("Max angle inner rad: ", _max_angle_inner_rad)
-
 func set_steer_value(steer_value: float) -> void:
 	# Exit if this axle cannot steer (max angle is 0).
 	if _max_angle_inner_rad == 0.0:
@@ -108,9 +105,6 @@ func set_steer_value(steer_value: float) -> void:
 
 	var current_angle_inner_deg = rad_to_deg(current_angle_inner_rad)
 	var current_angle_outer_deg = rad_to_deg(current_angle_outer_rad)
-
-	print("Inner angle: ", current_angle_inner_deg)
-	print("Outer angle: ", current_angle_outer_deg)
 
 	# 3. Assign the angles to the correct wheels with the correct sign.
 	if steer_value > 0: # Steering RIGHT
