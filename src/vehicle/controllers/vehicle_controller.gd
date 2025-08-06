@@ -7,6 +7,7 @@ const RADS_TO_RPM = 30.0 / PI
 #region Export Variables
 # --- Components ---
 @export var pedal_controller: PedalController
+@export var steering_controller: SteeringController
 
 @export_group("Debug")
 @export var debug_mode: bool = true:
@@ -83,6 +84,16 @@ func _process(_delta: float) -> void:
 
 #region Physics
 func _physics_process(delta: float):
+	if not pedal_controller:
+		push_error("Pedal controller is not set.")
+		set_physics_process(false)
+		return
+
+	if not steering_controller:
+		push_error("Steering controller is not set.")
+		set_physics_process(false)
+		return
+
 	_controls(delta)
 
 	var gearbox_rpm: float = 0.0
@@ -95,14 +106,13 @@ func _physics_process(delta: float):
 		gearbox_rpm += average_rpm_after_ratios
 
 	# Steering logic
-	var steer_input = Input.get_axis("steer_right", "steer_left")
 	grounded = false
 	for i in range(axles.size()):
 		var axle: AxleController = axles[i]
 
 		# First axle gets steered for now
 		if i == 0:
-			axle.set_steer_value(steer_input)
+			axle.set_steer_value(steering_controller.get_steer_value())
 
 		# Update the states, which handles the steering as well.
 		axle.update_wheel_states(delta)
@@ -171,8 +181,10 @@ func _controls(d: float):
 	var brake_input = Input.is_action_pressed("brake")
 	var handbrake_input = Input.is_action_pressed("handbrake")
 	var clutch_input = Input.is_action_pressed("clutch")
+	var steer_input = Input.get_axis("steer_right", "steer_left")
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
+	steering_controller.process_inputs(steer_input, d)
 
 func _get_final_clutch_engagement(throttle: float) -> float:
 	# Get manual input from the player's foot

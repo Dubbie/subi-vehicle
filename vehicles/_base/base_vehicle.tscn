@@ -1,8 +1,9 @@
-[gd_scene load_steps=13 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=14 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
 [ext_resource type="PackedScene" uid="uid://c5wn8h36ysels" path="res://vehicles/_base/base_wheel.tscn" id="3_6w078"]
+[ext_resource type="Script" path="res://src/vehicle/controllers/steering_controller.gd" id="3_g7wwp"]
 [ext_resource type="Script" uid="uid://boq1uobqxqnxm" path="res://src/vehicle/controllers/axle_controller.gd" id="3_o7ea4"]
 [ext_resource type="PackedScene" uid="uid://tdom7gokww60" path="res://vehicles/silvia_s14/assets/silvia_s14.blend" id="3_pto0k"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="4_lavjc"]
@@ -38,9 +39,10 @@ lateral_stiffness_factor = 17.0
 relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "axles")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "axles")]
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
+steering_controller = NodePath("Components/SteeringController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
 clutch_input_curve = SubResource("Curve_lavjc")
 torque_curve = SubResource("Curve_rt677")
@@ -54,6 +56,9 @@ clutch_stiffness = 15.0
 script = ExtResource("2_rt677")
 metadata/_custom_type_script = "uid://do46hehsb6qtm"
 
+[node name="SteeringController" type="Node" parent="Components"]
+script = ExtResource("3_g7wwp")
+
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("BoxShape3D_rt677")
@@ -64,7 +69,7 @@ visible = false
 mesh = SubResource("BoxMesh_6w078")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.866025, -0.129409, 0.482963, 0, 0.965926, 0.258819, -0.5, -0.224144, 0.836516, 9, 4, 8)
+transform = Transform3D(0.866025, -0.129409, 0.482963, 0, 0.965926, 0.258819, -0.5, -0.224144, 0.836516, 5, 2, 6)
 fov = 60.0
 
 [node name="silvia_s14" parent="." instance=ExtResource("3_pto0k")]
