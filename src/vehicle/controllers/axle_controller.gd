@@ -80,7 +80,6 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 	# Ensure we convert the incoming DEGREES to RADIANS for all calculations.
 	_max_angle_inner_rad = deg_to_rad(p_max_steer_angle_deg)
 
-	# Now, all subsequent calculations will work correctly.
 	# Calculate the turning radius of the inner wheel at full lock.
 	var radius_at_inner_wheel = _wheelbase / tan(_max_angle_inner_rad)
 
@@ -99,7 +98,6 @@ func set_steer_value(steer_value: float) -> void:
 	var steer_abs = abs(steer_value)
 
 	# 2. Linearly interpolate to find the CURRENT angle for each wheel.
-	#    This is safe and cannot "explode" like the previous methods.
 	var current_angle_inner_rad = lerp(0.0, _max_angle_inner_rad, steer_abs)
 	var current_angle_outer_rad = lerp(0.0, _max_angle_outer_rad, steer_abs)
 
