@@ -10,7 +10,8 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 @export var steering_controller: SteeringController
 
 @export_group("Debug")
-@export var physics_sub_steps: int = 8 # Number of iterations to solve the drivetrain per frame.
+## Number of iterations to solve the drivetrain per frame.
+@export var physics_sub_steps: int = 8
 @export var debug_mode: bool = true:
 	set(value):
 		debug_mode = value
@@ -20,30 +21,38 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 
 # --- Vehicle Configuration ---
 @export_group("Chassis")
-@export var weight: float = 1250.0 # Mass in kilograms (kg)
+## The mass of the car.
+@export var weight: float = 1250.0 # kg
+## The axles of the car. First axle is always the steered one currently.
 @export var axles: Array[AxleController] = []
+## The turn diameter of the car.
 @export var turn_diameter: float = 10.4 # m
-@export var max_steer_angle: float = 38.0 # degrees
-
-@export_group("Clutch Configuration")
-@export var clutch_input_curve: Curve
-@export var launch_assist_max_speed: float = 5.0
-@export var launch_assist_factor: float = 1.3
+## The maximum steer angle in degrees. This is how much the inner tire will rotate at full steer.
+@export var max_steer_angle: float = 38.0
 
 @export_group("Engine")
-@export var torque_curve: Curve # Assign a Curve resource in the Inspector
+## The torque curve. X = RPM, Y = Torque
+@export var torque_curve: Curve
+## Flywheel inertia basically.
 @export var engine_inertia: float = 0.3
+## Internal friction of the engine, causing drag.
 @export var engine_friction_torque: float = 15.0
+## Idle RPM of the engine.
 @export var engine_min_rpm: float = 800.0
+## The maximum engine RPM.
 @export var engine_max_rpm: float = 7000.0
 
 @export_group("Transmission")
+## Gear ratios are defined in the order they appear in the array.
+## R, N, 1, 2, 3, 4, 5...
 @export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
 
 @export_group("Clutch")
-@export var clutch_stiffness: float = 250.0 # How sharply the clutch engages
+## How sharply the clutch engages
+@export var clutch_stiffness: float = 250.0
+## How much max torque can be transferred through the clutch. The engine max torque is multiplied by this number.
 @export var clutch_capacity: float = 1.2 # Multiplier for max torque transfer.
-## This factor, derived from the original code's 0.95f, controls the smoothing.
+## Controls the clutch torque smoothing.
 ## A value of 0.05 means the torque moves 5% towards the new target each frame.
 ## This is the primary tuning value for preventing oscillation.
 @export var clutch_smoothing_factor: float = 0.05
@@ -140,7 +149,7 @@ func _physics_process(delta: float):
 
 		# --- C. Update Clutch ---
 		var clutch_lock = 1.0
-		if (gear_index <= 2) and engine_rpm < (engine_min_rpm + 1500.0): # Assuming gear 1 is Reverse
+		if (gear_index <= 2) and engine_rpm < (engine_min_rpm + 1500.0):
 			clutch_lock = 0.0
 		if pedal_controller.brake_pedal > 0.5:
 			clutch_lock = 0.0
@@ -166,7 +175,9 @@ func _physics_process(delta: float):
 	for axle in axles:
 		axle.left_wheel.apply_forces_to_rigidbody()
 		axle.right_wheel.apply_forces_to_rigidbody()
+#endregion
 
+#region Private methods
 func _controls(d: float):
 	var gas_input = Input.is_action_pressed("gas")
 	var brake_input = Input.is_action_pressed("brake")
@@ -176,7 +187,6 @@ func _controls(d: float):
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
 	steering_controller.process_inputs(steer_input, d)
-#endregion
 
 func _setup_axles() -> void:
 	if axles.size() < 2:

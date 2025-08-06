@@ -1,7 +1,7 @@
 class_name WheelController
 extends RayCast3D
 
-#region Config
+#region Axle Config
 var wheel_radius: float = 0.316 # meters
 var wheel_mass: float = 18.0 # kg
 var wheel_width: float = 0.18 # meters
@@ -80,13 +80,12 @@ func _process(_delta: float) -> void:
 	# Create a pure spin rotation (Roll around the X-axis)
 	var spin_rotation = Basis().rotated(Vector3.RIGHT, -delta_rotation)
 
-	# Combine the rotations. The order is CRITICAL.
-	# This applies the steering first, and then applies the spin
-	# within the new, already-steered coordinate frame.
+	# Combine the rotations.
 	wheel_marker.basis = steer_rotation * spin_rotation
 
 	if not debug_mode or not has_contact: return
 
+	# Debug drawing
 	var force_scale: float = car.mass
 	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lat_force_vector / force_scale), Color.RED, 0.1)
@@ -98,6 +97,7 @@ func _process(_delta: float) -> void:
 		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f" % [smoothed_lon_slip, lat_slip]
 		DebugDraw3D.draw_text(text_position, slip_text)
 
+#region Public methods
 func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_spring_and_contact(delta)
 	_update_knuckle(p_steer_angle)
@@ -138,51 +138,6 @@ func _update_spring_and_contact(delta: float) -> void:
 
 	# Update the last spring length for the next frame's calculation
 	last_spring_length = current_spring_length
-
-func _update_knuckle(steer_angle: float) -> void:
-	# Store the current angle so the _process function can use it for visuals
-	current_steer_angle = steer_angle
-
-	# 1. Get the wheel's base orientation vectors in world space from the parent node.
-	var right_vec = global_transform.basis.x
-	var up_vec = global_transform.basis.y
-	var fwd_vec = global_transform.basis.z
-
-	# 2. Define the pivot axis for steering (the "up" direction of the suspension).
-	var pivot_axis = up_vec
-
-	# 3. Calculate the rotation in radians, inverting the sign to match Godot's coordinate system.
-	var rotation_rads = deg_to_rad(steer_angle)
-
-	# 4. Rotate the base vectors to get the final "knuckle" orientation.
-	knuckle_forward = fwd_vec.rotated(pivot_axis, rotation_rads)
-	knuckle_right = right_vec.rotated(pivot_axis, rotation_rads)
-	knuckle_up = up_vec # The suspension axis itself does not rotate.
-
-func _update_contact_velocities() -> void:
-	if has_contact:
-		contact_right = knuckle_right.slide(contact_normal).normalized()
-		contact_forward = - contact_right.cross(contact_normal).normalized()
-
-		var collider = get_collider()
-		var contact_object_velocity: Vector3 = Vector3.ZERO
-		if collider is RigidBody3D:
-			contact_object_velocity = collider.get_velocity_at_local_point(contact_point - collider.global_position)
-		elif collider is CharacterBody3D:
-			contact_object_velocity = collider.velocity
-
-		var body_point_velocity = car.linear_velocity + car.angular_velocity.cross(contact_point - car.global_position)
-		var relative_velocity = body_point_velocity - contact_object_velocity
-
-		contact_velocity = relative_velocity - contact_normal * relative_velocity.dot(contact_normal)
-		contact_lat_velocity = contact_velocity.dot(contact_right)
-		contact_lon_velocity = contact_velocity.dot(contact_forward)
-	else:
-		contact_right = knuckle_right
-		contact_forward = knuckle_forward
-		contact_velocity = Vector3.ZERO
-		contact_lat_velocity = 0.0
-		contact_lon_velocity = 0.0
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
 	drive_torque = current_drive_torque
@@ -252,3 +207,49 @@ func apply_forces_to_rigidbody():
 	var total_friction_force = lat_force_vector + lon_force_vector
 	car.apply_force(load_force_vector, global_position - car.global_position)
 	car.apply_force(total_friction_force, contact_point - car.global_position)
+
+#region Private methods
+func _update_knuckle(steer_angle: float) -> void:
+	# Store the current angle so the _process function can use it for visuals
+	current_steer_angle = steer_angle
+
+	# 1. Get the wheel's base orientation vectors in world space from the parent node.
+	var right_vec = global_transform.basis.x
+	var up_vec = global_transform.basis.y
+	var fwd_vec = global_transform.basis.z
+
+	# 2. Define the pivot axis for steering (the "up" direction of the suspension).
+	var pivot_axis = up_vec
+
+	# 3. Calculate the rotation in radians, inverting the sign to match Godot's coordinate system.
+	var rotation_rads = deg_to_rad(steer_angle)
+
+	# 4. Rotate the base vectors to get the final "knuckle" orientation.
+	knuckle_forward = fwd_vec.rotated(pivot_axis, rotation_rads)
+	knuckle_right = right_vec.rotated(pivot_axis, rotation_rads)
+	knuckle_up = up_vec # The suspension axis itself does not rotate.
+
+func _update_contact_velocities() -> void:
+	if has_contact:
+		contact_right = knuckle_right.slide(contact_normal).normalized()
+		contact_forward = - contact_right.cross(contact_normal).normalized()
+
+		var collider = get_collider()
+		var contact_object_velocity: Vector3 = Vector3.ZERO
+		if collider is RigidBody3D:
+			contact_object_velocity = collider.get_velocity_at_local_point(contact_point - collider.global_position)
+		elif collider is CharacterBody3D:
+			contact_object_velocity = collider.velocity
+
+		var body_point_velocity = car.linear_velocity + car.angular_velocity.cross(contact_point - car.global_position)
+		var relative_velocity = body_point_velocity - contact_object_velocity
+
+		contact_velocity = relative_velocity - contact_normal * relative_velocity.dot(contact_normal)
+		contact_lat_velocity = contact_velocity.dot(contact_right)
+		contact_lon_velocity = contact_velocity.dot(contact_forward)
+	else:
+		contact_right = knuckle_right
+		contact_forward = knuckle_forward
+		contact_velocity = Vector3.ZERO
+		contact_lat_velocity = 0.0
+		contact_lon_velocity = 0.0
