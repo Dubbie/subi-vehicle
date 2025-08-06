@@ -185,9 +185,6 @@ func _update_contact_velocities() -> void:
 		contact_lon_velocity = 0.0
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
-	if not tire_model:
-		return
-
 	drive_torque = current_drive_torque
 
 	# Apply motor torque to spin the wheel up
@@ -224,6 +221,8 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 		model_params.lat_slip_angle_rad = lat_slip
 		model_params.surface_friction = dyn_muk # Pass dynamic friction
 		model_params.longitudinal_velocity = contact_lon_velocity
+		model_params.wheel_angular_velocity = current_angular_velocity
+		model_params.wheel_radius = wheel_radius
 		model_params.delta = delta
 
 		# Call the model to get the forces
@@ -233,7 +232,7 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	local_force.x = tire_forces.x # Lateral force
 	local_force.z = tire_forces.y # Longitudinal force
 
-	# Correctly apply traction force back to the wheel
+	# Apply traction back to wheel
 	var t_traction = local_force.z * wheel_radius
 	var w_traction = t_traction * inertia_inverse * delta
 	current_angular_velocity -= w_traction

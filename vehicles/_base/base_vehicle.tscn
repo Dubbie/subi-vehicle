@@ -23,15 +23,15 @@ size = Vector3(1.8, 1, 4.2)
 [sub_resource type="BoxMesh" id="BoxMesh_6w078"]
 size = Vector3(1.8, 1, 4.2)
 
-[sub_resource type="Resource" id="Resource_o7ea4"]
+[sub_resource type="Resource" id="Resource_g7wwp"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
 longitudinal_stiffness_factor = 18.0
 lateral_stiffness_factor = 17.0
-relaxation_length = 0.5
+relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[sub_resource type="Resource" id="Resource_pto0k"]
+[sub_resource type="Resource" id="Resource_8g4xo"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
 longitudinal_stiffness_factor = 18.0
@@ -40,16 +40,15 @@ relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "axles")]
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, -0.2, 0)
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
 steering_controller = NodePath("Components/SteeringController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
 clutch_input_curve = SubResource("Curve_lavjc")
-launch_assist_max_speed = 0.0
 torque_curve = SubResource("Curve_rt677")
-engine_friction_constant = 0.1
 gear_ratios = Array[float]([-2.9, 0.0, 3.2, 1.78, 1.3, 0.9])
-clutch_stiffness = 15.0
 
 [node name="Components" type="Node" parent="."]
 
@@ -85,7 +84,7 @@ z_offset = -1.262
 track_width = 1.48
 diff_ratio = 0.0
 wheel_width = 0.205
-tire_model = SubResource("Resource_o7ea4")
+tire_model = SubResource("Resource_g7wwp")
 left_wheel = NodePath("WheelFL")
 right_wheel = NodePath("WheelFR")
 
@@ -117,7 +116,7 @@ drive_ratio = 1.0
 handbrake_ratio = 1.0
 diff_ratio = 3.469
 wheel_width = 0.205
-tire_model = SubResource("Resource_pto0k")
+tire_model = SubResource("Resource_8g4xo")
 left_wheel = NodePath("WheelRL")
 right_wheel = NodePath("WheelRR")
 
