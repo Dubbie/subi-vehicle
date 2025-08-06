@@ -75,7 +75,7 @@ func _process(_delta: float) -> void:
 	if not debug_mode or not has_contact: return
 
 	var force_scale: float = car.mass
-	DebugDraw3D.draw_arrow(contact_point, contact_point + (load_force_vector / force_scale), Color.GREEN, 0.1)
+	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lat_force_vector / force_scale), Color.RED, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lon_force_vector / force_scale), Color.BLUE, 0.1)
 
@@ -89,7 +89,7 @@ func _process(_delta: float) -> void:
 		.rotated(Vector3.RIGHT, -delta_rotation) # Spin from angular velocity
 
 	# Apply scale
-	wheel_basis = wheel_basis.scaled(Vector3(wheel_width, wheel_radius, wheel_radius))
+	wheel_basis = wheel_basis.scaled(Vector3(0.005, wheel_radius, wheel_radius))
 
 	# Build transform
 	var wheel_cylinder: Transform3D = Transform3D(wheel_basis, wheel_position)
@@ -105,7 +105,6 @@ func _process(_delta: float) -> void:
 	var text_position = global_position + Vector3.UP * 0.5
 	var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f" % [smoothed_lon_slip, lat_slip]
 	DebugDraw3D.draw_text(text_position, slip_text)
-
 
 func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_spring_and_contact(delta)
@@ -244,5 +243,6 @@ func apply_forces_to_rigidbody():
 	if not has_contact:
 		return
 
-	var total_force = lat_force_vector + lon_force_vector + load_force_vector
-	car.apply_force(total_force, global_position - car.global_position)
+	var total_friction_force = lat_force_vector + lon_force_vector
+	car.apply_force(load_force_vector, global_position - car.global_position)
+	car.apply_force(total_friction_force, contact_point - car.global_position)
