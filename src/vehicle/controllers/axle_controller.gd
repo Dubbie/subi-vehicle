@@ -50,59 +50,76 @@ extends Node3D
 var steer_angle_left: float = 0.0
 var steer_angle_right: float = 0.0
 var _wheelbase: float = 0.0
-var _min_turn_radius: float = 0.0
+var _max_angle_inner_rad: float = 0.0
+var _max_angle_outer_rad: float = 0.0
 #endregion
 
-func initialize(p_wheelbase: float, p_min_turn_radius: float) -> void:
-    _wheelbase = p_wheelbase
-    _min_turn_radius = p_min_turn_radius
+func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
+	_wheelbase = p_wheelbase
 
-    # Set up the wheels to use the axle's configuration.
-    var wheels: Array[WheelController] = [left_wheel, right_wheel]
-    for wheel in wheels:
-        # Tire model
-        wheel.tire_model = tire_model.duplicate()
+	# Set up the wheels to use the axle's configuration.
+	var wheels: Array[WheelController] = [left_wheel, right_wheel]
+	for wheel in wheels:
+		# Tire model
+		wheel.tire_model = tire_model.duplicate()
 
-        # Suspension
-        wheel.suspension_stiffness = spring_stiffness
-        wheel.suspension_damping = spring_damping
-        wheel.suspension_max_length = max_spring_length
+		# Suspension
+		wheel.suspension_stiffness = spring_stiffness
+		wheel.suspension_damping = spring_damping
+		wheel.suspension_max_length = max_spring_length
 
-        # Wheel properties
-        wheel.wheel_mass = wheel_mass
-        wheel.wheel_radius = wheel_radius
-        wheel.wheel_width = wheel_width
+		# Wheel properties
+		wheel.wheel_mass = wheel_mass
+		wheel.wheel_radius = wheel_radius
+		wheel.wheel_width = wheel_width
+
+	# If this axle can't steer, we're done.
+	if p_max_steer_angle_deg <= 0.0:
+		return
+
+	# Ensure we convert the incoming DEGREES to RADIANS for all calculations.
+	_max_angle_inner_rad = deg_to_rad(p_max_steer_angle_deg)
+
+	# Now, all subsequent calculations will work correctly.
+	# Calculate the turning radius of the inner wheel at full lock.
+	var radius_at_inner_wheel = _wheelbase / tan(_max_angle_inner_rad)
+
+	# Calculate the turning radius of the outer wheel at full lock.
+	var radius_at_outer_wheel = radius_at_inner_wheel + track_width
+
+	# Calculate the corresponding max angle for the outer wheel (will also be in radians).
+	_max_angle_outer_rad = atan(_wheelbase / radius_at_outer_wheel)
+
+	print("Max angle outer rad: ", _max_angle_outer_rad)
+	print("Max angle inner rad: ", _max_angle_inner_rad)
 
 func set_steer_value(steer_value: float) -> void:
-    if _wheelbase == 0:
-        push_warning("Wheelbase is 0, can't calculate steering")
-        return
+	# Exit if this axle cannot steer (max angle is 0).
+	if _max_angle_inner_rad == 0.0:
+		return
 
-    # If steer value is negligible, straighten the wheels.
-    if abs(steer_value) < 0.000001:
-        steer_angle_left = 0.0
-        steer_angle_right = 0.0
-        return
+	# 1. Get the absolute steering input (0.0 to 1.0).
+	var steer_abs = abs(steer_value)
 
-    # Current turning radius of center point
-    var r: float = _min_turn_radius / abs(steer_value)
+	# 2. Linearly interpolate to find the CURRENT angle for each wheel.
+	#    This is safe and cannot "explode" like the previous methods.
+	var current_angle_inner_rad = lerp(0.0, _max_angle_inner_rad, steer_abs)
+	var current_angle_outer_rad = lerp(0.0, _max_angle_outer_rad, steer_abs)
 
-    # Radii for inner and outer wheel
-    var r_inner: float = r - track_width / 2.0
-    var r_outer: float = r + track_width / 2.0
+	var current_angle_inner_deg = rad_to_deg(current_angle_inner_rad)
+	var current_angle_outer_deg = rad_to_deg(current_angle_outer_rad)
 
-    # Calculate angles in degrees
-    var inner_deg: float = rad_to_deg(atan(_wheelbase / r_inner))
-    var outer_deg: float = rad_to_deg(atan(_wheelbase / r_outer))
+	print("Inner angle: ", current_angle_inner_deg)
+	print("Outer angle: ", current_angle_outer_deg)
 
-    # Sign and assignment of angles to the correct wheels
-    if steer_value < 0: # Steering Left
-        # The left wheel is the inner wheel and needs a greater angle.
-        # Angles are negative for a left turn.
-        steer_angle_left = - inner_deg
-        steer_angle_right = - outer_deg
-    else: # Steering Right
-        # The right wheel is the inner wheel and needs a greater angle.
-        # Angles are positive for a right turn.
-        steer_angle_left = outer_deg
-        steer_angle_right = inner_deg
+	# 3. Assign the angles to the correct wheels with the correct sign.
+	if steer_value > 0: # Steering RIGHT
+		steer_angle_right = current_angle_outer_deg
+		steer_angle_left = current_angle_inner_deg
+	else: # Steering LEFT
+		steer_angle_left = - current_angle_outer_deg
+		steer_angle_right = - current_angle_inner_deg
+
+func update_wheel_states(delta: float) -> void:
+	left_wheel.update_state(steer_angle_left, delta)
+	right_wheel.update_state(steer_angle_right, delta)

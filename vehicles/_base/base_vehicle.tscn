@@ -1,9 +1,10 @@
-[gd_scene load_steps=12 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=13 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
 [ext_resource type="PackedScene" uid="uid://c5wn8h36ysels" path="res://vehicles/_base/base_wheel.tscn" id="3_6w078"]
 [ext_resource type="Script" uid="uid://boq1uobqxqnxm" path="res://src/vehicle/controllers/axle_controller.gd" id="3_o7ea4"]
+[ext_resource type="PackedScene" uid="uid://tdom7gokww60" path="res://vehicles/silvia_s14/assets/silvia_s14.blend" id="3_pto0k"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="4_lavjc"]
 
 [sub_resource type="Curve" id="Curve_lavjc"]
@@ -21,32 +22,30 @@ size = Vector3(1.8, 1, 4.2)
 [sub_resource type="BoxMesh" id="BoxMesh_6w078"]
 size = Vector3(1.8, 1, 4.2)
 
-[sub_resource type="Resource" id="Resource_8g4xo"]
+[sub_resource type="Resource" id="Resource_o7ea4"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
-lateral_stiffness_factor = 22.0
-longitudinal_stiffness_factor = 20.0
+longitudinal_stiffness_factor = 18.0
+lateral_stiffness_factor = 17.0
 relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[sub_resource type="Resource" id="Resource_dc6sd"]
+[sub_resource type="Resource" id="Resource_pto0k"]
 script = ExtResource("4_lavjc")
 coefficient_of_friction = 0.9
-lateral_stiffness_factor = 22.0
-longitudinal_stiffness_factor = 20.0
+longitudinal_stiffness_factor = 18.0
+lateral_stiffness_factor = 17.0
 relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "wheels", "driven_wheels", "axles")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "axles")]
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
-wheels = [NodePath("Axles/FrontAxle/WheelFL"), NodePath("Axles/FrontAxle/WheelFR"), NodePath("Axles/RearAxle/WheelRL"), NodePath("Axles/RearAxle/WheelRR")]
-driven_wheels = [NodePath("Axles/RearAxle/WheelRL"), NodePath("Axles/RearAxle/WheelRR")]
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
 clutch_input_curve = SubResource("Curve_lavjc")
 torque_curve = SubResource("Curve_rt677")
+engine_friction_constant = 0.1
 gear_ratios = Array[float]([-2.9, 0.0, 3.2, 1.78, 1.3, 0.9])
-final_drive_ratio = 3.649
 clutch_stiffness = 15.0
 
 [node name="Components" type="Node" parent="."]
@@ -63,6 +62,77 @@ shape = SubResource("BoxShape3D_rt677")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 visible = false
 mesh = SubResource("BoxMesh_6w078")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.866025, -0.129409, 0.482963, 0, 0.965926, 0.258819, -0.5, -0.224144, 0.836516, 9, 4, 8)
+fov = 60.0
+
+[node name="silvia_s14" parent="." instance=ExtResource("3_pto0k")]
+transform = Transform3D(-1.48, 0, 2.23474e-07, 0, 1.48, 0, -2.23474e-07, 0, -1.48, 0, -0.352036, -2.24984)
+
+[node name="Axles" type="Node3D" parent="."]
+
+[node name="FrontAxle" type="Node3D" parent="Axles" node_paths=PackedStringArray("left_wheel", "right_wheel")]
+script = ExtResource("3_o7ea4")
+label_prefix = "Front"
+z_offset = -1.262
+track_width = 1.48
+diff_ratio = 0.0
+wheel_width = 0.205
+tire_model = SubResource("Resource_o7ea4")
+left_wheel = NodePath("WheelFL")
+right_wheel = NodePath("WheelFR")
+
+[node name="WheelFL" parent="Axles/FrontAxle" instance=ExtResource("3_6w078")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
+target_position = Vector3(0, -0.4, 0)
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/FrontAxle/WheelFL/Animation/Camber/Wheel" index="0"]
+transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+radius = 0.316
+height = 0.205
+sides = 16
+
+[node name="WheelFR" parent="Axles/FrontAxle" instance=ExtResource("3_6w078")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
+target_position = Vector3(0, -0.4, 0)
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/FrontAxle/WheelFR/Animation/Camber/Wheel" index="0"]
+transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+radius = 0.316
+height = 0.205
+sides = 16
+
+[node name="RearAxle" type="Node3D" parent="Axles" node_paths=PackedStringArray("left_wheel", "right_wheel")]
+script = ExtResource("3_o7ea4")
+z_offset = 1.262
+track_width = 1.48
+drive_ratio = 1.0
+handbrake_ratio = 1.0
+wheel_width = 0.205
+tire_model = SubResource("Resource_pto0k")
+left_wheel = NodePath("WheelRL")
+right_wheel = NodePath("WheelRR")
+
+[node name="WheelRL" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
+target_position = Vector3(0, -0.4, 0)
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/RearAxle/WheelRL/Animation/Camber/Wheel" index="0"]
+transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+radius = 0.316
+height = 0.205
+sides = 16
+
+[node name="WheelRR" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
+target_position = Vector3(0, -0.4, 0)
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/RearAxle/WheelRR/Animation/Camber/Wheel" index="0"]
+transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+radius = 0.316
+height = 0.205
+sides = 16
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
@@ -93,43 +163,6 @@ unique_name_in_owner = true
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 23.0
-
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 4, 8)
-fov = 60.0
-
-[node name="Axles" type="Node3D" parent="."]
-
-[node name="FrontAxle" type="Node3D" parent="Axles" node_paths=PackedStringArray("left_wheel", "right_wheel")]
-script = ExtResource("3_o7ea4")
-label_prefix = "Front"
-z_offset = -1.262
-tire_model = SubResource("Resource_8g4xo")
-left_wheel = NodePath("WheelFL")
-right_wheel = NodePath("WheelFR")
-
-[node name="WheelFL" parent="Axles/FrontAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, -1.262)
-target_position = Vector3(0, -0.4, 0)
-
-[node name="WheelFR" parent="Axles/FrontAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, -1.262)
-target_position = Vector3(0, -0.4, 0)
-
-[node name="RearAxle" type="Node3D" parent="Axles" node_paths=PackedStringArray("left_wheel", "right_wheel")]
-script = ExtResource("3_o7ea4")
-z_offset = 1.262
-tire_model = SubResource("Resource_dc6sd")
-left_wheel = NodePath("WheelRL")
-right_wheel = NodePath("WheelRR")
-
-[node name="WheelRL" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 1.262)
-target_position = Vector3(0, -0.4, 0)
-
-[node name="WheelRR" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 1.262)
-target_position = Vector3(0, -0.4, 0)
 
 [editable path="Axles/FrontAxle/WheelFL"]
 [editable path="Axles/FrontAxle/WheelFR"]

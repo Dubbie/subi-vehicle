@@ -21,6 +21,7 @@ var has_contact: bool = false
 var inertia_inverse: float = 0.1
 var delta_rotation: float = 0.0
 var driven_wheel: bool = false
+var current_steer_angle: float = 0.0
 
 var knuckle_forward: Vector3 = Vector3.ZERO
 var knuckle_right: Vector3 = Vector3.ZERO
@@ -53,6 +54,7 @@ var lat_force_vector: Vector3 = Vector3.ZERO
 
 # --- Node References ---
 @onready var car: VehicleController = get_owner()
+@onready var wheel_marker: Marker3D = $Animation/Camber/Wheel
 
 func _ready() -> void:
 	target_position = Vector3.DOWN * (suspension_max_length + wheel_radius)
@@ -69,6 +71,20 @@ func _ready() -> void:
 	add_exception(car)
 
 func _process(_delta: float) -> void:
+	# We use current_spring_length for responsiveness.
+	wheel_marker.position = Vector3.DOWN * current_spring_length
+
+	# Create a pure steering rotation (Yaw around the Y-axis)
+	var steer_rotation = Basis().rotated(Vector3.UP, deg_to_rad(current_steer_angle))
+
+	# Create a pure spin rotation (Roll around the X-axis)
+	var spin_rotation = Basis().rotated(Vector3.RIGHT, -delta_rotation)
+
+	# Combine the rotations. The order is CRITICAL.
+	# This applies the steering first, and then applies the spin
+	# within the new, already-steered coordinate frame.
+	wheel_marker.basis = steer_rotation * spin_rotation
+
 	if not debug_mode or not has_contact: return
 
 	var force_scale: float = car.mass
@@ -76,32 +92,11 @@ func _process(_delta: float) -> void:
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lat_force_vector / force_scale), Color.RED, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lon_force_vector / force_scale), Color.BLUE, 0.1)
 
-	# Cylinder should mimic what the wheel does.
-	var wheel_position: Vector3 = global_position
-	wheel_position.y -= last_spring_length
-
-	# Create basis with spin
-	var wheel_basis := Basis(Vector3.UP, PI * 0.5) \
-		.rotated(Vector3.FORWARD, deg_to_rad(90)) \
-		.rotated(Vector3.RIGHT, -delta_rotation) # Spin from angular velocity
-
-	# Apply scale
-	wheel_basis = wheel_basis.scaled(Vector3(0.005, wheel_radius, wheel_radius))
-
-	# Build transform
-	var wheel_cylinder: Transform3D = Transform3D(wheel_basis, wheel_position)
-
-	# Slip fade from yellow → red
-	var slip_strength: float = clampf(lon_slip / 1.0, 0.0, 1.0)
-	var cyl_color: Color = Color.YELLOW.lerp(Color.RED, slip_strength)
-
-	# Draw
-	DebugDraw3D.draw_cylinder(wheel_cylinder, cyl_color, 0.0)
-
 	# Debug text for slip values
-	var text_position = global_position + Vector3.UP * 0.5
-	var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f" % [smoothed_lon_slip, lat_slip]
-	DebugDraw3D.draw_text(text_position, slip_text)
+	if has_contact:
+		var text_position = global_position + Vector3.UP * 3.0
+		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f" % [smoothed_lon_slip, lat_slip]
+		DebugDraw3D.draw_text(text_position, slip_text)
 
 func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_spring_and_contact(delta)
@@ -145,12 +140,24 @@ func _update_spring_and_contact(delta: float) -> void:
 	last_spring_length = current_spring_length
 
 func _update_knuckle(steer_angle: float) -> void:
-	var rotated_basis = basis.rotated(Vector3.UP, deg_to_rad(steer_angle))
+	# Store the current angle so the _process function can use it for visuals
+	current_steer_angle = steer_angle
 
-	# Store the world-space directions of the wheel.
-	knuckle_right = global_transform.basis * rotated_basis.x
-	knuckle_forward = global_transform.basis * -rotated_basis.z
-	knuckle_up = global_transform.basis.y
+	# 1. Get the wheel's base orientation vectors in world space from the parent node.
+	var right_vec = global_transform.basis.x
+	var up_vec = global_transform.basis.y
+	var fwd_vec = global_transform.basis.z
+
+	# 2. Define the pivot axis for steering (the "up" direction of the suspension).
+	var pivot_axis = up_vec
+
+	# 3. Calculate the rotation in radians, inverting the sign to match Godot's coordinate system.
+	var rotation_rads = deg_to_rad(steer_angle)
+
+	# 4. Rotate the base vectors to get the final "knuckle" orientation.
+	knuckle_forward = fwd_vec.rotated(pivot_axis, rotation_rads)
+	knuckle_right = right_vec.rotated(pivot_axis, rotation_rads)
+	knuckle_up = up_vec # The suspension axis itself does not rotate.
 
 func _update_contact_velocities() -> void:
 	if has_contact:
@@ -178,6 +185,9 @@ func _update_contact_velocities() -> void:
 		contact_lon_velocity = 0.0
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
+	if not tire_model:
+		return
+
 	drive_torque = current_drive_torque
 
 	# Apply motor torque to spin the wheel up

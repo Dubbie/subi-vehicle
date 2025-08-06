@@ -4,7 +4,7 @@ extends RigidBody3D
 const RPM_TO_RADS = PI / 30.0
 const RADS_TO_RPM = 30.0 / PI
 
-#region Ex.Variables
+#region Export Variables
 # --- Components ---
 @export var pedal_controller: PedalController
 
@@ -12,14 +12,13 @@ const RADS_TO_RPM = 30.0 / PI
 @export var debug_mode: bool = true:
 	set(value):
 		debug_mode = value
-		for wheel in wheels:
-			wheel.debug_mode = value
+		for axle in axles:
+			axle.left_wheel.debug_mode = value
+			axle.right_wheel.debug_mode = value
 
 # --- Vehicle Configuration ---
 @export_group("Chassis")
 @export var weight: float = 1250.0 # Mass in kilograms (kg)
-@export var wheels: Array[WheelController] = []
-@export var driven_wheels: Array[WheelController] = []
 @export var axles: Array[AxleController] = []
 @export var turn_diameter: float = 10.4 # m
 @export var max_steer_angle: float = 38.0 # degrees
@@ -36,10 +35,8 @@ const RADS_TO_RPM = 30.0 / PI
 @export var engine_max_rpm: float = 7000.0
 @export var engine_friction_constant: float = 0.01 # Scales friction with RPM
 
-@export_group("Drivetrain")
 @export_group("Transmission")
 @export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
-@export var final_drive_ratio: float = 3.42 # The differential
 
 @export_group("Clutch")
 @export var clutch_stiffness: float = 10.0 # How sharply the clutch "bites"
@@ -51,6 +48,7 @@ const RADS_TO_RPM = 30.0 / PI
 #endregion
 
 #region Internal
+var _driven_axles: Array[AxleController] = []
 var engine_angular_velocity: float = 0.0 # rad/s
 var engine_rpm: float = 0.0
 var clutch_torque: float = 0.0 # The final torque passed to the wheels
@@ -83,53 +81,53 @@ func _process(_delta: float) -> void:
 	var rpm_string: String = "RPM: %.0f" % engine_rpm
 	engine_label.text = rpm_string
 
-
-# The main physics loop. All time-dependent calculations now use the 'delta' parameter.
+#region Physics
 func _physics_process(delta: float):
-	controls(delta)
+	_controls(delta)
 
-	var average_drive_wheel_rpm: float = 0.0
-	for wheel in driven_wheels:
-		average_drive_wheel_rpm += wheel.current_angular_velocity * RADS_TO_RPM
-		wheel.driven_wheel = true
-	average_drive_wheel_rpm /= driven_wheels.size()
+	var gearbox_rpm: float = 0.0
+	var current_gear_ratio = gear_ratios[gear_index]
+	for axle in _driven_axles:
+		var left_wheel_rpm: float = axle.left_wheel.current_angular_velocity * RADS_TO_RPM
+		var right_wheel_rpm: float = axle.right_wheel.current_angular_velocity * RADS_TO_RPM
+		var average_rpm: float = (left_wheel_rpm + right_wheel_rpm) / 2.0
+		var average_rpm_after_ratios: float = average_rpm * current_gear_ratio * axle.diff_ratio
+		gearbox_rpm += average_rpm_after_ratios
 
+	# Steering logic
+	var steer_input = Input.get_axis("steer_right", "steer_left")
 	grounded = false
-	for wheel in wheels:
-		wheel.update_state(0.0, delta)
+	for i in range(axles.size()):
+		var axle: AxleController = axles[i]
 
-		if wheel.has_contact and not grounded:
+		# First axle gets steered for now
+		if i == 0:
+			axle.set_steer_value(steer_input)
+
+		# Update the states, which handles the steering as well.
+		axle.update_wheel_states(delta)
+
+		# Update the grounded state
+		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
 			grounded = true
 
-	# Calculate gearbox RPM based on wheel speed and gear ratios
-	var current_gear_ratio = gear_ratios[gear_index]
-	var gearbox_rpm = average_drive_wheel_rpm * current_gear_ratio * final_drive_ratio
-
 	# Update the drivetrain simulation
-	update_drivetrain(gearbox_rpm, false, delta)
+	_update_drivetrain(gearbox_rpm, false, delta)
 
 	var final_brake_torque: float = pedal_controller.brake_pedal * max_brake_torque
 
-	var axle_torque: float = clutch_torque * current_gear_ratio * final_drive_ratio
-	var drive_torque_per_wheel: float = axle_torque / driven_wheels.size()
+	for axle in axles:
+		var axle_torque: float = clutch_torque * current_gear_ratio * axle.diff_ratio
+		var drive_torque_per_wheel: float = axle_torque / 2.0
+		var brake_torque_per_wheel: float = final_brake_torque * axle.brake_ratio
 
-	for wheel in wheels:
-		var drive_torque: float = 0.0
-		if wheel in driven_wheels:
-			drive_torque = drive_torque_per_wheel
+		axle.left_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, delta)
+		axle.right_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, delta)
 
-		wheel.calculate_wheel_physics(drive_torque, final_brake_torque, 1.0, delta)
-		wheel.apply_forces_to_rigidbody()
+		axle.left_wheel.apply_forces_to_rigidbody()
+		axle.right_wheel.apply_forces_to_rigidbody()
 
-func controls(d: float):
-	var gas_input = Input.is_action_pressed("gas")
-	var brake_input = Input.is_action_pressed("brake")
-	var handbrake_input = Input.is_action_pressed("handbrake")
-	var clutch_input = Input.is_action_pressed("clutch")
-
-	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
-
-func update_drivetrain(p_gearbox_rpm: float, is_reverse: bool, delta: float):
+func _update_drivetrain(p_gearbox_rpm: float, is_reverse: bool, delta: float):
 	# --- GET INPUTS FROM PEDAL CONTROLLER ---
 	var throttle_input = pedal_controller.get_throttle()
 
@@ -154,22 +152,27 @@ func update_drivetrain(p_gearbox_rpm: float, is_reverse: bool, delta: float):
 	# The engagement value is passed through the curve to get the actual lock factor.
 	var clutch_lock = clutch_input_curve.sample_baked(final_clutch_engagement)
 
-	if randf() < 0.1:
-		print("Clutch lock: ", clutch_lock)
-
-	# --- 3. CLUTCH PHYSICS (Unchanged) ---
+	# --- 3. CLUTCH PHYSICS ---
 	var clutch_slip_velocity = engine_angular_velocity - (p_gearbox_rpm * RPM_TO_RADS)
 	var clutch_torque_max = torque_curve.get_max_value() * clutch_capacity * clutch_lock
 	var clutch_torque_next = clamp(clutch_slip_velocity * clutch_stiffness, -clutch_torque_max, clutch_torque_max)
 
 	clutch_torque = lerp(clutch_torque, clutch_torque_next, 0.5)
 
-	# --- 4. GEAR DISPLAY LOGIC (Unchanged) ---
+	# --- 4. GEAR DISPLAY LOGIC ---
 	current_gear = gear_index - 1
 	if is_reverse:
 		current_gear = -1
 	if clutch_lock < 0.1:
 		current_gear = 0
+
+func _controls(d: float):
+	var gas_input = Input.is_action_pressed("gas")
+	var brake_input = Input.is_action_pressed("brake")
+	var handbrake_input = Input.is_action_pressed("handbrake")
+	var clutch_input = Input.is_action_pressed("clutch")
+
+	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, d)
 
 func _get_final_clutch_engagement(throttle: float) -> float:
 	# Get manual input from the player's foot
@@ -200,38 +203,49 @@ func _get_final_clutch_engagement(throttle: float) -> float:
 
 	# Default State: If none of the above conditions are met, the clutch should be fully engaged.
 	return 1.0
+#endregion
 
 func _setup_axles() -> void:
-	# --- 1. VALIDATE AXLE SETUP ---
-	# We need at least a front and a rear axle to define a wheelbase.
 	if axles.size() < 2:
-		push_error("Vehicle requires at least 2 axles to calculate wheelbase.")
+		push_error("Vehicle requires at least 2 axles.")
 		return
 
-	# The front axle is always the first.
-	var front_axle_z = axles[0].z_offset
-	var rear_axle_z = axles[axles.size() - 1].z_offset
+	# Assuming front axle is at index 0
+	var front_axle = axles[0]
+	var rear_axle = axles[axles.size() - 1]
 
-	# The distance between the front and rear axles.
-	wheelbase = abs(front_axle_z - rear_axle_z)
-
+	wheelbase = abs(front_axle.z_offset - rear_axle.z_offset)
 	if wheelbase < 0.01:
-		push_error("Wheelbase is nearly zero. Check axle z_offsets.")
+		push_error("Wheelbase is nearly zero.")
 		return
 
-	# Calculate the tightest turning radius based on physics
-	var max_steer_rad = deg_to_rad(max_steer_angle)
-	if abs(tan(max_steer_rad)) < 0.0001:
-		min_turn_radius = 10000 # Effectively straight
+	# 1. Convert the physically-defined MAX INNER wheel angle to radians.
+	var max_inner_wheel_angle_rad = deg_to_rad(max_steer_angle)
+
+	if abs(tan(max_inner_wheel_angle_rad)) < 0.0001:
+		min_turn_radius = 10000 # Avoid division by zero, effectively straight
 	else:
-		min_turn_radius = wheelbase / tan(max_steer_rad)
+		# 2. Calculate the turning radius of the INNER WHEEL at full lock.
+		var min_radius_at_inner_wheel = wheelbase / tan(max_inner_wheel_angle_rad)
+
+		# 3. The vehicle's minimum turning radius is measured from the center,
+		#    so we add half the track width of the front axle.
+		min_turn_radius = min_radius_at_inner_wheel + (front_axle.track_width / 2.0)
 
 	# Update the turn_diameter for debugging/UI purposes
 	turn_diameter = min_turn_radius * 2.0
+	print("--- Vehicle Setup ---")
 	print("Calculated Wheelbase: ", wheelbase, " m")
-	print("Calculated Min Turn Radius: ", min_turn_radius, " m")
-	print("Calculated Turn Diameter: ", turn_diameter, " m")
+	print("Defined Max Steer Angle: ", max_steer_angle, " deg")
+	print("--------------------")
 
 	# Initialize the axles
 	for axle in axles:
-		axle.initialize(wheelbase, min_turn_radius)
+		# Check if we have to add the wheels to driven wheels
+		if axle.drive_ratio > 0.0:
+			_driven_axles.append(axle)
+			axle.left_wheel.driven_wheel = true
+			axle.right_wheel.driven_wheel = true
+
+		var max_steer: float = max_steer_angle if axle == front_axle else 0.0
+		axle.initialize(wheelbase, max_steer)
