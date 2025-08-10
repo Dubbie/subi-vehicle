@@ -9,6 +9,7 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 @export var pedal_controller: PedalController
 @export var clutch_controller: ClutchController
 @export var steering_controller: SteeringController
+@export var transmission_controller: TransmissionController
 
 @export_group("Debug")
 ## Number of iterations to solve the drivetrain per frame.
@@ -77,7 +78,6 @@ var engine_angular_velocity: float = 0.0 # rad/s
 var engine_torque: float = 0.0
 var engine_rpm: float = 0.0
 var clutch_torque: float = 0.0 # The final torque passed to the wheels
-var gear_index: int = 2 # Start in Neutral
 var current_gear: int = 0 # For UI/sound display
 ## Needed for clutch logic in air
 var grounded: bool = false
@@ -102,6 +102,10 @@ func _ready():
 	clutch_controller.set_auto_clutch_enabled(auto_clutch_enabled)
 
 	_setup_axles()
+
+	transmission_controller.gear_ratios = gear_ratios
+	if _driven_axles.size() > 0:
+		transmission_controller.initialize(_driven_axles[0].left_wheel.wheel_radius, _driven_axles[0].diff_ratio)
 
 func _process(_delta: float) -> void:
 	if debug_mode and not engine_label.visible:
@@ -133,7 +137,7 @@ func _process(_delta: float) -> void:
 	if clutch_info.launch_assist_active:
 		assist_info += "\n[LAUNCH ASSIST]"
 
-	var gear_string: String = "\nGear: %d" % gear_index
+	var gear_string: String = "\nGear: %d" % transmission_controller.get_current_gear()
 	var speed_string: String = "\nSpeed: %.1f m/s" % vehicle_speed
 	var ground_string: String = "\nGrounded: %s" % ("YES" if grounded else "NO")
 	var debug_string: String = "\nDebug: %s" % clutch_info.debug_state
@@ -150,7 +154,7 @@ func _physics_process(delta: float):
 	# --- 1. Process User Controls ---
 	_controls(delta)
 
-	# --- 2. Calculate vehicle speed ---
+	# --- 2. Calculate vehicle speed (horizontal only) ---
 	var horizontal_velocity = Vector3(linear_velocity.x, 0, linear_velocity.z)
 	vehicle_speed = horizontal_velocity.length()
 
@@ -164,13 +168,22 @@ func _physics_process(delta: float):
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
 			grounded = true
 
-	# --- 4. Iterative Drivetrain Solver ---
+	# --- 4. Update Transmission ---
+	var new_gear_index = transmission_controller.update_transmission(
+		vehicle_speed,
+		pedal_controller.throttle_pedal,
+		pedal_controller.brake_pedal,
+		grounded,
+		delta
+	)
+
+	# --- 5. Iterative Drivetrain Solver ---
 	var sub_step_delta = delta / physics_sub_steps
 	for i in range(physics_sub_steps):
 		# --- A. Calculate Gearbox RPM from current wheel state ---
 		var gearbox_rpm: float = 0.0
 		var gearbox_angular_velocity: float = 0.0
-		var current_gear_ratio = gear_ratios[gear_index]
+		var current_gear_ratio = transmission_controller.get_current_gear_ratio()
 
 		if _driven_axles.size() > 0:
 			var total_gearbox_rpm: float = 0.0
@@ -190,9 +203,9 @@ func _physics_process(delta: float):
 			engine_angular_velocity,
 			gearbox_angular_velocity,
 			max_engine_torque,
-			pedal_controller.clutch_pedal,
+			pedal_controller.clutch_pedal, # Assuming you have this
 			pedal_controller.throttle_pedal,
-			gear_index,
+			new_gear_index,
 			vehicle_speed,
 			grounded,
 			sub_step_delta
@@ -219,7 +232,7 @@ func _physics_process(delta: float):
 			axle.left_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, sub_step_delta)
 			axle.right_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, sub_step_delta)
 
-	# --- 5. Apply Final Forces to Rigidbody ---
+	# --- 6. Apply Final Forces to Rigidbody ---
 	for axle in axles:
 		axle.left_wheel.apply_forces_to_rigidbody()
 		axle.right_wheel.apply_forces_to_rigidbody()

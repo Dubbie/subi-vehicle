@@ -146,7 +146,12 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	current_angular_velocity += drive_torque * inertia_inverse * delta
 
 	# Rolling Resistance and Braking
-	var rolling_resistance_torque = 5.0 * -sign(current_angular_velocity)
+	var crr = 0.015 # Coefficient of Rolling Resistance - Tweak this value!
+	var rolling_resistance_force = crr * local_force.y # Based on normal force
+	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
+
+	# Apply it in the correct direction
+	rolling_resistance_torque *= -sign(current_angular_velocity)
 	var total_resist_torque = current_brake_torque + rolling_resistance_torque
 	var w_brake = total_resist_torque * inertia_inverse * delta
 
