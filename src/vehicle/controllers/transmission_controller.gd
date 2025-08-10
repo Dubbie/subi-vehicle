@@ -4,12 +4,7 @@ extends Node
 signal gear_changed(old_gear: int, new_gear: int)
 signal shift_requested(target_gear: int)
 
-# Transmission configuration
-@export_group("Gear Ratios")
-## Gear ratios are defined in the order they appear in the array.
-## R, N, 1, 2, 3, 4, 5...
-@export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
-
+# Transmission Configuration
 @export_group("Automatic Transmission")
 @export var auto_shift_enabled: bool = true
 ## RPM at which to upshift
@@ -18,9 +13,6 @@ signal shift_requested(target_gear: int)
 @export var downshift_rpm: float = 3000.0
 ## Minimum time between shifts (prevents hunting)
 @export var shift_delay: float = 0.5
-## Enable kickdown for aggressive downshifts
-@export var kickdown_enabled: bool = true
-@export var kickdown_throttle_threshold: float = 0.8
 
 @export_group("Manual Override")
 ## Allow manual shifting even in auto mode
@@ -35,11 +27,14 @@ signal shift_requested(target_gear: int)
 @export var reverse_max_speed: float = 5.0
 
 # Internal state
+var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
 var current_gear_index: int = 1 # Start in neutral
 var target_gear_index: int = 1
+var old_gear: int = 1
 var last_shift_time: float = 0.0
 var manual_override_time: float = 0.0
 var is_manual_override: bool = false
+var is_shifting: bool = false
 
 # Calculated shift speeds for each gear
 var upshift_speeds: Array[float] = []
@@ -100,6 +95,11 @@ func update_transmission(
 			is_manual_override = false
 			manual_override_time = 0.0
 
+	if last_shift_time > shift_delay and is_shifting:
+		is_shifting = false
+		gear_changed.emit(old_gear, current_gear_index)
+		print("Gear changed from ", old_gear, " to ", current_gear_index)
+
 	# Process manual shift inputs if enabled
 	if manual_override_enabled:
 		_process_manual_inputs()
@@ -125,7 +125,7 @@ func _process_manual_inputs():
 
 func _process_automatic_shifting(vehicle_speed: float, throttle_pedal: float, brake_pedal: float):
 	# Don't shift too frequently
-	if last_shift_time < shift_delay:
+	if last_shift_time < (shift_delay * 5.0):
 		return
 
 	var current_forward_gear = current_gear_index - 2 # Convert to 0-based forward gear index
@@ -148,23 +148,10 @@ func _process_automatic_shifting(vehicle_speed: float, throttle_pedal: float, br
 			shift_to_gear(current_gear_index - 1)
 			return
 
-		# Kickdown logic - aggressive downshift for more power
-		if kickdown_enabled and throttle_pedal > kickdown_throttle_threshold:
-			# Check if a lower gear would keep us under redline
-			var target_gear_forward = current_forward_gear - 1
-			if target_gear_forward >= 0:
-				var target_gear_ratio = gear_ratios[target_gear_forward + 2]
-				var projected_rpm = (vehicle_speed / wheel_radius) * 60.0 / (2.0 * PI) * target_gear_ratio * differential_ratio
-
-				# Only kickdown if we won't exceed safe RPM
-				if projected_rpm < (upshift_rpm - 500.0):
-					shift_to_gear(current_gear_index - 1)
-					return
-
 	# Automatic gear selection based on vehicle state
-	_select_appropriate_gear(vehicle_speed, brake_pedal)
+	_select_appropriate_gear(vehicle_speed, throttle_pedal, brake_pedal)
 
-func _select_appropriate_gear(vehicle_speed: float, brake_pedal: float):
+func _select_appropriate_gear(vehicle_speed: float, throttle_pedal: float, brake_pedal: float):
 	# Neutral selection
 	if vehicle_speed < 0.1 and brake_pedal > 0.1:
 		# If stopped and braking, go to neutral
@@ -176,7 +163,7 @@ func _select_appropriate_gear(vehicle_speed: float, brake_pedal: float):
 	# This is typically handled by a separate reverse input or gear selector
 
 	# First gear selection
-	if current_gear_index == 1 and vehicle_speed > first_gear_min_speed:
+	if current_gear_index == 1 and throttle_pedal > 0.1:
 		# Engage first gear when starting to move
 		shift_to_gear(2) # First gear
 		return
@@ -188,18 +175,14 @@ func shift_to_gear(target_gear: int):
 	if target_gear == current_gear_index:
 		return
 
-	# Don't allow shifting to reverse at speed
-	if target_gear == 0 and get_vehicle_speed() > reverse_max_speed:
-		return
-
-	var old_gear = current_gear_index
+	is_shifting = true
+	old_gear = current_gear_index
 	current_gear_index = target_gear
 	last_shift_time = 0.0
 
-	emit_signal("gear_changed", old_gear, current_gear_index)
-	emit_signal("shift_requested", current_gear_index)
+	shift_requested.emit(current_gear_index)
 
-	print("Shifted from gear %d to gear %d" % [old_gear, current_gear_index])
+	print("Shift started from gear %d to gear %d" % [old_gear, current_gear_index])
 
 func get_current_gear() -> int:
 	return current_gear_index
@@ -218,10 +201,6 @@ func get_gear_name() -> String:
 func force_gear(gear: int):
 	"""Force a specific gear (for debugging or special cases)"""
 	shift_to_gear(gear)
-
-func get_vehicle_speed() -> float:
-	# This should be set by the vehicle controller
-	return 0.0
 
 func set_auto_shift_enabled(enabled: bool):
 	auto_shift_enabled = enabled

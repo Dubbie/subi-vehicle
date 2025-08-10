@@ -30,9 +30,16 @@ var launch_assist_engagement_rate: float = 1.5
 
 # Auto-clutch parameters (for beginners)
 var auto_clutch_engagement_threshold: float = 1500.0
-var auto_clutch_speed: float = 1.5
-var auto_clutch_disengage_speed: float = 0.8 # Slower disengagement
-var auto_clutch_min_engagement_speed: float = 3.0 # m/s - minimum speed to stay engaged
+## Auto clutch engage speed when higher than first gear.
+var auto_clutch_speed: float = 3.0
+## Auto clutch disengage speed when higher than first gear.
+var auto_clutch_disengage_speed: float = 2.4
+## m/s - minimum speed to stay engaged
+var auto_clutch_min_engagement_speed: float = 3.0
+## Auto clutch engage speed in first gear
+var auto_clutch_first_gear_engagement_speed: float = 1.5
+## Auto clutch disengage speed in first gear
+var auto_clutch_first_gear_disengage_speed: float = 0.8
 
 # Thermal simulation
 var clutch_heat_capacity: float = 500.0 # J/K
@@ -48,6 +55,7 @@ var _auto_clutch_waiting_for_rpm: bool = false
 var _debug_auto_clutch_state: String = ""
 
 func update_clutch(
+	transmission_controller: TransmissionController,
 	engine_rpm: float,
 	engine_angular_velocity: float,
 	gearbox_angular_velocity: float,
@@ -61,8 +69,8 @@ func update_clutch(
 ) -> float:
 	# Update clutch engagement based on input and assists
 	_update_clutch_engagement(
-		engine_rpm, clutch_pedal, throttle_pedal,
-		current_gear, vehicle_speed, is_grounded, delta
+		transmission_controller, engine_rpm, clutch_pedal, throttle_pedal, current_gear, vehicle_speed, is_grounded,
+		delta
 	)
 
 	# Calculate clutch slip
@@ -97,6 +105,7 @@ func update_clutch(
 	return clutch_torque
 
 func _update_clutch_engagement(
+	transmission_controller: TransmissionController,
 	engine_rpm: float,
 	clutch_pedal: float,
 	throttle_pedal: float,
@@ -117,7 +126,7 @@ func _update_clutch_engagement(
 	# Auto-clutch mode overrides everything
 	elif auto_clutch_enabled and current_gear > 1:
 		# Determine if we should stay engaged based on speed and RPM
-		var should_stay_engaged = vehicle_speed > auto_clutch_min_engagement_speed or engine_rpm > auto_clutch_engagement_threshold
+		var should_stay_engaged = (vehicle_speed > auto_clutch_min_engagement_speed or engine_rpm > auto_clutch_engagement_threshold) and not transmission_controller.is_shifting
 
 		# If we're moving and have reasonable RPM, stay engaged for engine braking
 		if should_stay_engaged and clutch_engagement > 0.1:
@@ -137,7 +146,7 @@ func _update_clutch_engagement(
 
 			# Only engage if we have throttle input and sufficient RPM
 			if throttle_pedal > 0.1 and is_grounded:
-				if engine_rpm < auto_clutch_engagement_threshold:
+				if engine_rpm < auto_clutch_engagement_threshold or transmission_controller.is_shifting:
 					# Keep disengaged until RPM builds up
 					target_engagement = 0.0
 					_auto_clutch_waiting_for_rpm = true
@@ -186,11 +195,18 @@ func _update_clutch_engagement(
 	# Smooth engagement changes with different speeds for different modes
 	var engagement_speed: float
 	if auto_clutch_enabled:
-		# Use different speeds for engaging vs disengaging
-		if target_engagement > clutch_engagement:
-			engagement_speed = auto_clutch_speed # Normal engagement speed
+		if current_gear < 2:
+			# Make clutch engage slower in first gear
+			if target_engagement > clutch_engagement:
+				engagement_speed = auto_clutch_first_gear_engagement_speed
+			else:
+				engagement_speed = auto_clutch_first_gear_disengage_speed
 		else:
-			engagement_speed = auto_clutch_disengage_speed # Slower disengagement
+			# Make clutch engage faster in higher gears
+			if target_engagement > clutch_engagement:
+				engagement_speed = auto_clutch_speed
+			else:
+				engagement_speed = auto_clutch_disengage_speed
 	elif _anti_stall_active or _launch_assist_active:
 		engagement_speed = anti_stall_engagement_speed
 	else:

@@ -87,6 +87,7 @@ var wheelbase: float = 0.0 # m
 var min_turn_radius: float = 0.0
 var last_clutch_slip_velocity: float = 0.0
 var vehicle_speed: float = 0.0
+var restrict_gas: bool = false
 #endregion
 
 @onready var engine_label: Label = %EngineLabel
@@ -106,6 +107,9 @@ func _ready():
 	transmission_controller.gear_ratios = gear_ratios
 	if _driven_axles.size() > 0:
 		transmission_controller.initialize(_driven_axles[0].left_wheel.wheel_radius, _driven_axles[0].diff_ratio)
+
+	transmission_controller.shift_requested.connect(_on_shift_requested.unbind(1))
+	transmission_controller.gear_changed.connect(_on_gear_changed.unbind(2))
 
 func _process(_delta: float) -> void:
 	if debug_mode and not engine_label.visible:
@@ -138,7 +142,7 @@ func _process(_delta: float) -> void:
 		assist_info += "\n[LAUNCH ASSIST]"
 
 	var gear_string: String = "\nGear: %d" % transmission_controller.get_current_gear()
-	var speed_string: String = "\nSpeed: %.1f m/s" % vehicle_speed
+	var speed_string: String = "\nSpeed: %.1f m/s (%.1f km/h)" % [vehicle_speed, vehicle_speed * 3.6]
 	var ground_string: String = "\nGrounded: %s" % ("YES" if grounded else "NO")
 	var debug_string: String = "\nDebug: %s" % clutch_info.debug_state
 
@@ -199,11 +203,12 @@ func _physics_process(delta: float):
 
 		# --- C. Update Clutch with realistic simulation ---
 		clutch_torque = clutch_controller.update_clutch(
+			transmission_controller,
 			engine_rpm,
 			engine_angular_velocity,
 			gearbox_angular_velocity,
 			max_engine_torque,
-			pedal_controller.clutch_pedal, # Assuming you have this
+			pedal_controller.clutch_pedal,
 			pedal_controller.throttle_pedal,
 			new_gear_index,
 			vehicle_speed,
@@ -240,7 +245,7 @@ func _physics_process(delta: float):
 
 #region Private methods
 func _controls(d: float):
-	var gas_input = Input.is_action_pressed("gas")
+	var gas_input = Input.is_action_pressed("gas") and not restrict_gas
 	var brake_input = Input.is_action_pressed("brake")
 	var handbrake_input = Input.is_action_pressed("handbrake")
 	var clutch_input = Input.is_action_pressed("clutch")
@@ -293,3 +298,9 @@ func _setup_axles() -> void:
 
 		var max_steer: float = max_steer_angle if axle == front_axle else 0.0
 		axle.initialize(wheelbase, max_steer)
+
+func _on_shift_requested() -> void:
+	restrict_gas = true
+
+func _on_gear_changed() -> void:
+	restrict_gas = false
