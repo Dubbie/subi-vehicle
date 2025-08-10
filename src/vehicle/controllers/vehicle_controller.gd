@@ -10,6 +10,7 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 @export var clutch_controller: ClutchController
 @export var steering_controller: SteeringController
 @export var transmission_controller: TransmissionController
+@export var engine_controller: EngineController
 
 @export_group("Debug")
 ## Number of iterations to solve the drivetrain per frame.
@@ -31,18 +32,6 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 @export var turn_diameter: float = 10.4 # m
 ## The maximum steer angle in degrees. This is how much the inner tire will rotate at full steer.
 @export var max_steer_angle: float = 38.0
-
-@export_group("Engine")
-## The torque curve. X = RPM, Y = Torque
-@export var torque_curve: Curve
-## Flywheel inertia basically.
-@export var engine_inertia: float = 0.3
-## Internal friction of the engine, causing drag.
-@export var engine_friction_torque: float = 15.0
-## Idle RPM of the engine.
-@export var engine_min_rpm: float = 800.0
-## The maximum engine RPM.
-@export var engine_max_rpm: float = 7000.0
 
 @export_group("Transmission")
 ## Gear ratios are defined in the order they appear in the array.
@@ -74,9 +63,6 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 
 #region Internal
 var _driven_axles: Array[AxleController] = []
-var engine_angular_velocity: float = 0.0 # rad/s
-var engine_torque: float = 0.0
-var engine_rpm: float = 0.0
 var clutch_torque: float = 0.0 # The final torque passed to the wheels
 var current_gear: int = 0 # For UI/sound display
 ## Needed for clutch logic in air
@@ -94,7 +80,15 @@ var restrict_gas: bool = false
 
 func _ready():
 	mass = weight
-	engine_rpm = engine_min_rpm
+
+	# Validate required components
+	if not engine_controller:
+		push_error("EngineController is required but not assigned.")
+		return
+
+	if not clutch_controller:
+		push_error("ClutchController is required but not assigned.")
+		return
 
 	# Initialize clutch controller
 	clutch_controller.set_clutch_parameters(clutch_stiffness, clutch_capacity, clutch_smoothing_factor)
@@ -119,9 +113,12 @@ func _process(_delta: float) -> void:
 
 	if not debug_mode: return
 
-	# Get clutch info for debugging
+	# Get engine info for debugging
+	var engine_info = engine_controller.get_engine_info()
 	var clutch_info = clutch_controller.get_clutch_info()
-	var rpm_string: String = "RPM: %.0f" % engine_rpm
+
+	var rpm_string: String = "RPM: %.0f" % engine_info.rpm
+	var torque_string: String = "\nTorque: %.1f Nm (%.1f%%)" % [engine_info.current_torque, engine_controller.get_engine_load()]
 	var clutch_string: String = "\nClutch: %.1f%% (%.1f Nm)" % [clutch_info.engagement * 100, clutch_info.torque]
 	var slip_string: String = "\nSlip: %.0f RPM" % clutch_info.slip_rpm
 	var temp_string: String = "\nTemp: %.0f°C" % clutch_info.temperature
@@ -141,16 +138,22 @@ func _process(_delta: float) -> void:
 	if clutch_info.launch_assist_active:
 		assist_info += "\n[LAUNCH ASSIST]"
 
+	var engine_status: String = ""
+	if engine_info.is_idle:
+		engine_status += "\n[IDLE]"
+	if engine_info.is_redline:
+		engine_status += "\n[REDLINE]"
+
 	var gear_string: String = "\nGear: %d" % transmission_controller.get_current_gear()
 	var speed_string: String = "\nSpeed: %.1f m/s (%.1f km/h)" % [vehicle_speed, vehicle_speed * 3.6]
 	var ground_string: String = "\nGrounded: %s" % ("YES" if grounded else "NO")
 	var debug_string: String = "\nDebug: %s" % clutch_info.debug_state
 
-	engine_label.text = rpm_string + clutch_string + slip_string + temp_string + gear_string + speed_string + ground_string + mode_info + assist_info + debug_string
+	engine_label.text = rpm_string + torque_string + clutch_string + slip_string + temp_string + gear_string + speed_string + ground_string + engine_status + mode_info + assist_info + debug_string
 
 #region Physics
 func _physics_process(delta: float):
-	if not pedal_controller or not steering_controller:
+	if not pedal_controller or not steering_controller or not engine_controller:
 		push_error("Controllers not set.")
 		set_physics_process(false)
 		return
@@ -197,17 +200,13 @@ func _physics_process(delta: float):
 			gearbox_rpm = total_gearbox_rpm / _driven_axles.size()
 			gearbox_angular_velocity = gearbox_rpm * RPM_TO_RADS
 
-		# --- B. Update Engine ---
-		var initial_torque = torque_curve.sample_baked(engine_rpm) * pedal_controller.throttle_pedal
-		var max_engine_torque: float = torque_curve.max_value
-
-		# --- C. Update Clutch with realistic simulation ---
+		# --- B. Update Clutch with realistic simulation ---
 		clutch_torque = clutch_controller.update_clutch(
 			transmission_controller,
-			engine_rpm,
-			engine_angular_velocity,
+			engine_controller.get_rpm(),
+			engine_controller.get_angular_velocity(),
 			gearbox_angular_velocity,
-			max_engine_torque,
+			engine_controller.get_max_torque(),
 			pedal_controller.clutch_pedal,
 			pedal_controller.throttle_pedal,
 			new_gear_index,
@@ -216,16 +215,9 @@ func _physics_process(delta: float):
 			sub_step_delta
 		)
 
-		# Update engine with clutch torque
-		var engine_effective_torque = initial_torque - engine_friction_torque - clutch_torque
-		engine_torque = engine_effective_torque
-		var engine_acceleration = (engine_effective_torque / engine_inertia) * sub_step_delta
-		engine_angular_velocity += engine_acceleration
-
-		var engine_min_angular_velocity = engine_min_rpm * RPM_TO_RADS
-		var engine_max_angular_velocity = engine_max_rpm * RPM_TO_RADS
-		engine_angular_velocity = clampf(engine_angular_velocity, engine_min_angular_velocity, engine_max_angular_velocity)
-		engine_rpm = engine_angular_velocity * RADS_TO_RPM
+		# --- C. Update Engine ---
+		var throttle_input = pedal_controller.throttle_pedal if not restrict_gas else 0.0
+		engine_controller.update_engine(throttle_input, clutch_torque, sub_step_delta)
 
 		# --- D. Update Wheels with new torque for this sub-step ---
 		var final_brake_torque: float = pedal_controller.brake_pedal * max_brake_torque
@@ -304,3 +296,22 @@ func _on_shift_requested() -> void:
 
 func _on_gear_changed() -> void:
 	restrict_gas = false
+
+#region Public API
+## Get the current engine RPM (for external systems like sound)
+func get_engine_rpm() -> float:
+	return engine_controller.get_rpm() if engine_controller else 0.0
+
+## Get the current engine load percentage (for external systems)
+func get_engine_load() -> float:
+	return engine_controller.get_engine_load() if engine_controller else 0.0
+
+## Get detailed engine information (for debugging or external systems)
+func get_engine_info() -> Dictionary:
+	return engine_controller.get_engine_info() if engine_controller else {}
+
+## Force engine to stall (for external events)
+func stall_engine() -> void:
+	if engine_controller:
+		engine_controller.stall_engine()
+#endregion
