@@ -7,6 +7,7 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 #region Export Variables
 # --- Components ---
 @export var pedal_controller: PedalController
+@export var clutch_controller: ClutchController
 @export var steering_controller: SteeringController
 
 @export_group("Debug")
@@ -48,14 +49,22 @@ const RPM_TO_RADS = (2.0 * PI) / 60.0
 @export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
 
 @export_group("Clutch")
-## How sharply the clutch engages
 @export var clutch_stiffness: float = 250.0
-## How much max torque can be transferred through the clutch. The engine max torque is multiplied by this number.
-@export var clutch_capacity: float = 1.2 # Multiplier for max torque transfer.
-## Controls the clutch torque smoothing.
-## A value of 0.05 means the torque moves 5% towards the new target each frame.
-## This is the primary tuning value for preventing oscillation.
+@export var clutch_capacity: float = 1.2
 @export var clutch_smoothing_factor: float = 0.05
+
+@export_subgroup("Smart Assists")
+@export var anti_stall_enabled: bool = true
+@export var launch_assist_enabled: bool = true
+@export var auto_clutch_enabled: bool = true
+
+@export_subgroup("Anti-Stall")
+@export var stall_rpm_threshold: float = 1200.0
+@export var anti_stall_engagement_speed: float = 4.0
+
+@export_subgroup("Launch Assist")
+@export var launch_assist_rpm_threshold: float = 2000.0
+@export var launch_assist_slip_target: float = 200.0
 
 @export_group("Brakes")
 @export var max_brake_torque: float = 4000.0
@@ -77,6 +86,7 @@ var wheelbase: float = 0.0 # m
 ## Min turn radius calculated from axle setup
 var min_turn_radius: float = 0.0
 var last_clutch_slip_velocity: float = 0.0
+var vehicle_speed: float = 0.0
 #endregion
 
 @onready var engine_label: Label = %EngineLabel
@@ -84,6 +94,12 @@ var last_clutch_slip_velocity: float = 0.0
 func _ready():
 	mass = weight
 	engine_rpm = engine_min_rpm
+
+	# Initialize clutch controller
+	clutch_controller.set_clutch_parameters(clutch_stiffness, clutch_capacity, clutch_smoothing_factor)
+	clutch_controller.set_anti_stall_enabled(anti_stall_enabled)
+	clutch_controller.set_launch_assist_enabled(launch_assist_enabled)
+	clutch_controller.set_auto_clutch_enabled(auto_clutch_enabled)
 
 	_setup_axles()
 
@@ -95,8 +111,34 @@ func _process(_delta: float) -> void:
 
 	if not debug_mode: return
 
+	# Get clutch info for debugging
+	var clutch_info = clutch_controller.get_clutch_info()
 	var rpm_string: String = "RPM: %.0f" % engine_rpm
-	engine_label.text = rpm_string
+	var clutch_string: String = "\nClutch: %.1f%% (%.1f Nm)" % [clutch_info.engagement * 100, clutch_info.torque]
+	var slip_string: String = "\nSlip: %.0f RPM" % clutch_info.slip_rpm
+	var temp_string: String = "\nTemp: %.0f°C" % clutch_info.temperature
+
+	var mode_info: String = ""
+	if clutch_info.auto_clutch_mode:
+		mode_info += "\n[AUTO-CLUTCH]"
+		if clutch_info.waiting_for_rpm:
+			if not grounded:
+				mode_info += " AIRBORNE"
+			else:
+				mode_info += " WAITING RPM"
+
+	var assist_info: String = ""
+	if clutch_info.anti_stall_active:
+		assist_info += "\n[ANTI-STALL]"
+	if clutch_info.launch_assist_active:
+		assist_info += "\n[LAUNCH ASSIST]"
+
+	var gear_string: String = "\nGear: %d" % gear_index
+	var speed_string: String = "\nSpeed: %.1f m/s" % vehicle_speed
+	var ground_string: String = "\nGrounded: %s" % ("YES" if grounded else "NO")
+	var debug_string: String = "\nDebug: %s" % clutch_info.debug_state
+
+	engine_label.text = rpm_string + clutch_string + slip_string + temp_string + gear_string + speed_string + ground_string + mode_info + assist_info + debug_string
 
 #region Physics
 func _physics_process(delta: float):
@@ -108,35 +150,55 @@ func _physics_process(delta: float):
 	# --- 1. Process User Controls ---
 	_controls(delta)
 
-	# --- 2. Per-Axle Logic (Steering and Grounded Check) ---
+	# --- 2. Calculate vehicle speed ---
+	var horizontal_velocity = Vector3(linear_velocity.x, 0, linear_velocity.z)
+	vehicle_speed = horizontal_velocity.length()
+
+	# --- 3. Per-Axle Logic (Steering and Grounded Check) ---
 	grounded = false
 	for i in range(axles.size()):
 		var axle: AxleController = axles[i]
-		# First axle gets steered
 		if i == 0:
 			axle.set_steer_value(steering_controller.get_steer_value())
-		axle.update_wheel_states(delta) # Handles raycasts, suspension, etc.
+		axle.update_wheel_states(delta)
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
 			grounded = true
 
-	# --- 3. Iterative Drivetrain Solver ---
-	# We run the simulation in sub-steps to allow the engine and wheels to converge
-	# on a stable state within a single physics frame, eliminating the 1-frame lag.
+	# --- 4. Iterative Drivetrain Solver ---
 	var sub_step_delta = delta / physics_sub_steps
 	for i in range(physics_sub_steps):
 		# --- A. Calculate Gearbox RPM from current wheel state ---
 		var gearbox_rpm: float = 0.0
+		var gearbox_angular_velocity: float = 0.0
 		var current_gear_ratio = gear_ratios[gear_index]
+
 		if _driven_axles.size() > 0:
 			var total_gearbox_rpm: float = 0.0
 			for axle in _driven_axles:
 				var avg_wheel_rpm = (axle.left_wheel.current_angular_velocity + axle.right_wheel.current_angular_velocity) / 2.0 * RADS_TO_RPM
 				total_gearbox_rpm += avg_wheel_rpm * current_gear_ratio * axle.diff_ratio
 			gearbox_rpm = total_gearbox_rpm / _driven_axles.size()
+			gearbox_angular_velocity = gearbox_rpm * RPM_TO_RADS
 
 		# --- B. Update Engine ---
 		var initial_torque = torque_curve.sample_baked(engine_rpm) * pedal_controller.throttle_pedal
 		var max_engine_torque: float = torque_curve.max_value
+
+		# --- C. Update Clutch with realistic simulation ---
+		clutch_torque = clutch_controller.update_clutch(
+			engine_rpm,
+			engine_angular_velocity,
+			gearbox_angular_velocity,
+			max_engine_torque,
+			pedal_controller.clutch_pedal,
+			pedal_controller.throttle_pedal,
+			gear_index,
+			vehicle_speed,
+			grounded,
+			sub_step_delta
+		)
+
+		# Update engine with clutch torque
 		var engine_effective_torque = initial_torque - engine_friction_torque - clutch_torque
 		engine_torque = engine_effective_torque
 		var engine_acceleration = (engine_effective_torque / engine_inertia) * sub_step_delta
@@ -146,18 +208,6 @@ func _physics_process(delta: float):
 		var engine_max_angular_velocity = engine_max_rpm * RPM_TO_RADS
 		engine_angular_velocity = clampf(engine_angular_velocity, engine_min_angular_velocity, engine_max_angular_velocity)
 		engine_rpm = engine_angular_velocity * RADS_TO_RPM
-
-		# --- C. Update Clutch ---
-		var clutch_lock = 1.0
-		if (gear_index <= 2) and engine_rpm < (engine_min_rpm + 1500.0):
-			clutch_lock = 0.0
-		if pedal_controller.brake_pedal > 0.5:
-			clutch_lock = 0.0
-
-		var clutch_slip_velocity = engine_angular_velocity - (gearbox_rpm * RPM_TO_RADS)
-		var clutch_torque_max = max_engine_torque * clutch_capacity * clutch_lock
-		var clutch_torque_target = clampf(clutch_slip_velocity * clutch_stiffness, -clutch_torque_max, clutch_torque_max)
-		clutch_torque = lerp(clutch_torque, clutch_torque_target, clutch_smoothing_factor)
 
 		# --- D. Update Wheels with new torque for this sub-step ---
 		var final_brake_torque: float = pedal_controller.brake_pedal * max_brake_torque
@@ -169,9 +219,7 @@ func _physics_process(delta: float):
 			axle.left_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, sub_step_delta)
 			axle.right_wheel.calculate_wheel_physics(drive_torque_per_wheel, brake_torque_per_wheel, 1.0, sub_step_delta)
 
-	# --- 4. Apply Final Forces to Rigidbody ---
-	# The forces have been accumulating in the wheel scripts during the sub-steps.
-	# Now we apply the single, final, combined force to the rigidbody.
+	# --- 5. Apply Final Forces to Rigidbody ---
 	for axle in axles:
 		axle.left_wheel.apply_forces_to_rigidbody()
 		axle.right_wheel.apply_forces_to_rigidbody()

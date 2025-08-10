@@ -3,14 +3,11 @@
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
 [ext_resource type="PackedScene" uid="uid://c5wn8h36ysels" path="res://vehicles/_base/base_wheel.tscn" id="3_6w078"]
-[ext_resource type="Script" path="res://src/vehicle/controllers/steering_controller.gd" id="3_g7wwp"]
+[ext_resource type="Script" uid="uid://b3qnjs8phepis" path="res://src/vehicle/controllers/steering_controller.gd" id="3_g7wwp"]
 [ext_resource type="Script" uid="uid://boq1uobqxqnxm" path="res://src/vehicle/controllers/axle_controller.gd" id="3_o7ea4"]
 [ext_resource type="PackedScene" uid="uid://tdom7gokww60" path="res://vehicles/silvia_s14/assets/silvia_s14.blend" id="3_pto0k"]
+[ext_resource type="Script" uid="uid://do78qmqh0evmt" path="res://src/vehicle/controllers/clutch_controller.gd" id="4_8g4xo"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="4_lavjc"]
-
-[sub_resource type="Curve" id="Curve_lavjc"]
-_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(0.20068, 0), 0.0, 0.0, 0, 0, Vector2(0.503401, 0.0984744), 1.10437, 5.4335, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
-point_count = 4
 
 [sub_resource type="Curve" id="Curve_rt677"]
 _limits = [0.0, 275.0, 0.0, 8000.0]
@@ -39,17 +36,20 @@ lateral_stiffness_factor = 17.0
 relaxation_length = 0.3
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "axles")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "clutch_controller", "steering_controller", "axles")]
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, -0.2, 0)
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
+clutch_controller = NodePath("Components/ClutchController")
 steering_controller = NodePath("Components/SteeringController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
-clutch_input_curve = SubResource("Curve_lavjc")
 torque_curve = SubResource("Curve_rt677")
+engine_inertia = 0.25
+engine_friction_torque = 30.0
 gear_ratios = Array[float]([-2.9, 0.0, 3.2, 1.78, 1.3, 0.9])
-clutch_smoothing_factor = 0.5
+anti_stall_engagement_speed = 12.0
+launch_assist_rpm_threshold = 2800.0
 
 [node name="Components" type="Node" parent="."]
 
@@ -59,6 +59,10 @@ metadata/_custom_type_script = "uid://do46hehsb6qtm"
 
 [node name="SteeringController" type="Node" parent="Components"]
 script = ExtResource("3_g7wwp")
+
+[node name="ClutchController" type="Node" parent="Components"]
+script = ExtResource("4_8g4xo")
+metadata/_custom_type_script = "uid://do78qmqh0evmt"
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
