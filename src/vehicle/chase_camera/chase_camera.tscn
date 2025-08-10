@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://caaf88j57r5p7"]
+
+[ext_resource type="Script" uid="uid://3yqycjcuwl3y" path="res://src/vehicle/chase_camera/chase_camera.gd" id="1_mkecj"]
+
+[node name="ChaseCamera" type="Node3D"]
+script = ExtResource("1_mkecj")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="SpringArm3D"]
+current = true
