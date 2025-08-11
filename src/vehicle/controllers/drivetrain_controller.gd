@@ -102,6 +102,9 @@ var clutch_torque: float = 0.0
 var clutch_temperature: float = 20.0
 var clutch_wear: float = 0.0
 var clutch_slip_rpm: float = 0.0
+var previous_clutch_torque: float = 0.0
+var clutch_locked_up: bool = false
+var lockup_hysteresis_timer: float = 0.0
 
 # Transmission state
 var current_gear_index: int = 1 # Start in neutral
@@ -166,52 +169,8 @@ func update_drivetrain(
 		throttle_input, clutch_pedal, brake_pedal, handbrake_pull, vehicle_speed, is_grounded, delta
 	)
 
-	# Calculate clutch slip and determine operating mode
-	var slip_velocity = engine_angular_velocity - gearbox_angular_velocity
-	clutch_slip_rpm = abs(slip_velocity * RADS_TO_RPM)
-
-	# Get current clutch capacity (affected by temperature and wear)
-	var max_clutch_capacity = _get_clutch_capacity()
-
-	# Determine if we should try to lock up or slip
-	var should_attempt_lockup = clutch_slip_rpm < lockup_slip_threshold and clutch_engagement > 0.95
-
-	if should_attempt_lockup:
-		# Try to lock up - calculate what torque is needed
-		var engine_torque_available = 0.0
-		if torque_curve:
-			engine_torque_available = torque_curve.sample_baked(engine_rpm) * clampf(throttle_input, 0.0, 1.0)
-
-		# Apply engine braking and friction
-		var friction_torque = engine_friction_coefficient * engine_angular_velocity
-		var brake_torque = engine_brake_torque * (1.0 - clampf(throttle_input, 0.0, 1.0))
-		var net_engine_torque = engine_torque_available - friction_torque - brake_torque
-
-		# Check if clutch can handle the demanded torque
-		var static_capacity = max_clutch_capacity * static_friction_multiplier
-		if abs(net_engine_torque) <= static_capacity:
-			# Lock up successful - transmit the demanded torque
-			clutch_torque = net_engine_torque
-			# Force speed matching for next frame (simulate locked condition)
-			if abs(slip_velocity) > 0.1:
-				# Apply strong corrective torque to minimize slip
-				var speed_correction = slip_velocity * 100.0 # Strong coupling when locked
-				clutch_torque += speed_correction
-		else:
-			# Demanded torque exceeds static capacity - must slip
-			clutch_torque = sign(net_engine_torque) * max_clutch_capacity
-	else:
-		# Slipping mode - kinetic friction
-		if abs(slip_velocity) < 0.01: # Nearly zero slip
-			clutch_torque = 0.0
-		else:
-			clutch_torque = sign(slip_velocity) * max_clutch_capacity
-
-	# Apply clutch engagement factor
-	clutch_torque *= clutch_engagement
-
 	# Smooth the torque to prevent numerical instability
-	clutch_torque = lerp(clutch_torque, clutch_torque, clutch_smoothing_factor)
+	clutch_torque = _calculate_clutch_torque(throttle_input, delta)
 
 	# Update engine with clutch reaction torque
 	_update_engine(throttle_input, clutch_torque, delta)
@@ -225,7 +184,7 @@ func update_drivetrain(
 		output_torque = clutch_torque * current_gear_ratio
 
 	# Update thermal and wear simulation
-	_update_clutch_condition(slip_velocity, delta)
+	_update_clutch_condition(delta)
 
 	# Return comprehensive state
 	return {
@@ -449,7 +408,9 @@ func _get_clutch_capacity() -> float:
 	return max(base_capacity, 0.0)
 
 ## Update clutch temperature and wear
-func _update_clutch_condition(slip_velocity: float, delta: float) -> void:
+func _update_clutch_condition(delta: float) -> void:
+	var slip_velocity = engine_angular_velocity - gearbox_angular_velocity
+
 	# Heat generation from friction work
 	# Power = Torque × Angular_velocity_difference
 	var friction_power = abs(clutch_torque * slip_velocity) # Watts
@@ -581,6 +542,94 @@ func _get_diagnostics() -> Dictionary:
 	}
 
 #region Public API
+func _calculate_clutch_torque(throttle_input: float, delta: float) -> float:
+	var slip_velocity = engine_angular_velocity - gearbox_angular_velocity
+	var slip_rpm = abs(slip_velocity * RADS_TO_RPM)
+
+	# Get available engine torque
+	var engine_torque_available = 0.0
+	if torque_curve:
+		engine_torque_available = torque_curve.sample_baked(engine_rpm) * clampf(throttle_input, 0.0, 1.0)
+
+	# Calculate resistive torques
+	var friction_torque = engine_friction_coefficient * engine_angular_velocity
+	var brake_torque = engine_brake_torque * (1.0 - clampf(throttle_input, 0.0, 1.0))
+	var net_engine_torque = engine_torque_available - friction_torque - brake_torque
+
+	# Get current clutch capacity
+	var max_clutch_capacity = _get_clutch_capacity()
+	var effective_capacity = max_clutch_capacity * clutch_engagement
+
+	if effective_capacity < 1.0:
+		# Clutch disengaged
+		clutch_locked_up = false
+		return 0.0
+
+	var target_clutch_torque: float
+
+	# Hysteresis for lockup/slip transition
+	var lockup_threshold = lockup_slip_threshold
+	var unlock_threshold = lockup_slip_threshold * 1.5 # Higher threshold to unlock
+
+	# Check lockup conditions with hysteresis
+	var should_lockup = false
+	if not clutch_locked_up:
+		# Not locked - check if we should lock up
+		should_lockup = (slip_rpm < lockup_threshold and
+						clutch_engagement > 0.95 and
+						abs(net_engine_torque) < effective_capacity * static_friction_multiplier * 0.9)
+	else:
+		# Already locked - check if we should unlock
+		var should_unlock = (slip_rpm > unlock_threshold or
+							abs(net_engine_torque) > effective_capacity * static_friction_multiplier)
+		should_lockup = not should_unlock
+
+	if should_lockup:
+		# Lockup mode - transmit exactly what the engine demands (clamped by capacity)
+		clutch_locked_up = true
+		lockup_hysteresis_timer = 0.1 # Stay locked for at least 0.1 seconds
+
+		var static_capacity = effective_capacity * static_friction_multiplier
+		target_clutch_torque = clampf(net_engine_torque, -static_capacity, static_capacity)
+
+		# Add gentle speed correction only if truly locked
+		if abs(slip_velocity) > 0.01:
+			var correction = slip_velocity * engine_inertia * 50.0
+			target_clutch_torque += correction
+			target_clutch_torque = clampf(target_clutch_torque, -static_capacity, static_capacity)
+	else:
+		# Slipping mode - kinetic friction
+		clutch_locked_up = false
+
+		if abs(slip_velocity) < 0.01:
+			target_clutch_torque = 0.0
+		else:
+			# Simple kinetic friction model
+			target_clutch_torque = sign(slip_velocity) * effective_capacity
+
+	# Apply strong smoothing to prevent oscillation
+	var smoothing = clutch_smoothing_factor
+	if abs(target_clutch_torque - previous_clutch_torque) > effective_capacity * 0.5:
+		# Large torque changes need more smoothing
+		smoothing *= 0.5
+
+	var smoothed_torque = lerp(previous_clutch_torque, target_clutch_torque, smoothing)
+
+	# Rate limiting - prevent torque from changing too fast
+	var max_change_rate = 3000.0 # Nm/s
+	var max_change = max_change_rate * delta
+	var change = smoothed_torque - previous_clutch_torque
+	if abs(change) > max_change:
+		smoothed_torque = previous_clutch_torque + sign(change) * max_change
+
+	previous_clutch_torque = smoothed_torque
+
+	# Update hysteresis timer
+	if lockup_hysteresis_timer > 0.0:
+		lockup_hysteresis_timer -= delta
+
+	return smoothed_torque
+
 func get_current_gear_ratio() -> float:
 	if current_gear_index < gear_ratios.size():
 		return gear_ratios[current_gear_index]
