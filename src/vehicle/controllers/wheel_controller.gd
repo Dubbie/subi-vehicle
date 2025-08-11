@@ -129,8 +129,7 @@ func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_contact_velocities()
 
 func _update_spring_and_contact(delta: float) -> void:
-	# Clear the anti-roll force from the previous frame. It will be recalculated
-	# by the AxleController if this is an independent suspension.
+	# Clear the anti-roll force from the previous frame
 	anti_roll_force = 0.0
 
 	force_raycast_update()
@@ -142,23 +141,32 @@ func _update_spring_and_contact(delta: float) -> void:
 		var ray_length = global_position.distance_to(get_collision_point())
 		current_spring_length = ray_length - wheel_radius
 
-		# --- Suspension Force Calculation (Hooke's Law) ---
-		var spring_depth = suspension_max_length - current_spring_length
-		var spring_force = suspension_stiffness * spring_depth
+		# Clamp spring length to valid range
+		current_spring_length = clamp(current_spring_length, 0.0, suspension_max_length)
 
-		# --- Damper Force Calculation ---
-		var spring_speed = (last_spring_length - current_spring_length) / delta
+		# --- Spring Force (Hooke's Law) ---
+		var spring_compression = suspension_max_length - current_spring_length
+		var spring_force = suspension_stiffness * spring_compression
+
+		# --- Damper Force ---
+		# Positive spring_speed = extending, negative = compressing
+		var spring_speed = (current_spring_length - last_spring_length) / delta
 		var damper_force = suspension_damping * spring_speed
 
-		# --- Suspension Force ---
-		# Add the anti-roll force here. It will be 0 for solid axles or disabled ARBs.
-		var suspension_force = max(0.0, spring_force + damper_force + anti_roll_force)
+		# --- Total Suspension Force ---
+		# Spring force is always upward (positive), damper opposes motion
+		# Add anti-roll force (will be 0 for solid axles)
+		var total_suspension_force = max(0.0, spring_force - damper_force + anti_roll_force)
 
-		local_force.y = suspension_force
-		load_force_vector = (suspension_force * knuckle_up.y) * get_collision_normal()
+		# Store the force magnitude
+		local_force.y = total_suspension_force
+
+		# Create the actual force vector in world space
+		load_force_vector = total_suspension_force * contact_normal
 	else:
 		contact_point = Vector3.ZERO
-		contact_normal = Vector3.ZERO
+		contact_normal = Vector3.UP
+		current_spring_length = suspension_max_length
 		local_force.y = 0.0
 		load_force_vector = Vector3.ZERO
 
