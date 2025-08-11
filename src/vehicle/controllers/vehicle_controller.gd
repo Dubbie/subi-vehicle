@@ -60,6 +60,8 @@ func _ready():
 	_setup_axles()
 	_initialize_drivetrain()
 
+	steering_controller.initialize(self)
+
 	# Connect drivetrain signals
 	drivetrain_controller.gear_changed.connect(_on_gear_changed)
 	drivetrain_controller.engine_stalled.connect(_on_engine_stalled)
