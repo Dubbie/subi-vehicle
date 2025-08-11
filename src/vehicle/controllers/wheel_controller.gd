@@ -51,6 +51,7 @@ var smoothed_lon_slip: float = 0.0
 #endregion
 
 #region Forces
+var anti_roll_force: float = 0.0
 var local_force: Vector3 = Vector3.ZERO
 var load_force_vector: Vector3 = Vector3.ZERO
 var lon_force_vector: Vector3 = Vector3.ZERO
@@ -128,6 +129,10 @@ func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_contact_velocities()
 
 func _update_spring_and_contact(delta: float) -> void:
+	# Clear the anti-roll force from the previous frame. It will be recalculated
+	# by the AxleController if this is an independent suspension.
+	anti_roll_force = 0.0
+
 	force_raycast_update()
 	has_contact = is_colliding()
 
@@ -136,11 +141,19 @@ func _update_spring_and_contact(delta: float) -> void:
 		contact_normal = get_collision_normal()
 		var ray_length = global_position.distance_to(get_collision_point())
 		current_spring_length = ray_length - wheel_radius
+
+		# --- Suspension Force Calculation (Hooke's Law) ---
 		var spring_depth = suspension_max_length - current_spring_length
 		var spring_force = suspension_stiffness * spring_depth
+
+		# --- Damper Force Calculation ---
 		var spring_speed = (last_spring_length - current_spring_length) / delta
 		var damper_force = suspension_damping * spring_speed
-		var suspension_force = max(0.0, spring_force + damper_force)
+
+		# --- Suspension Force ---
+		# Add the anti-roll force here. It will be 0 for solid axles or disabled ARBs.
+		var suspension_force = max(0.0, spring_force + damper_force + anti_roll_force)
+
 		local_force.y = suspension_force
 		load_force_vector = (suspension_force * knuckle_up.y) * get_collision_normal()
 	else:

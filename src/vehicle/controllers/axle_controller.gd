@@ -28,6 +28,9 @@ extends Node3D
 @export var spring_stiffness: float = 25000.0 # N/m
 ## Damping of the suspension spring when compressing.
 @export var spring_damping: float = 1350.0 # Ns/m
+## The stiffness of the anti-roll bar. Only used for independent suspension.
+## A higher value reduces body roll. Set to 0 to disable.
+@export var anti_roll_stiffness: float = 8000.0 # N/m
 
 @export_group("Suspension Geometry")
 ## Camber angle in degrees. Negative camber tilts the top of the wheel inwards.
@@ -37,6 +40,9 @@ extends Node3D
 ## Toe angle in degrees. Positive for toe-in (front of wheels point inwards).
 @export var toe_angle_deg: float = 0.1 # Degrees
 
+@export_group("Axle Type")
+## If true, the axle is simulated as a solid beam. If false, it's an independent suspension.
+@export var is_solid_axle: bool = false
 
 @export_group("Wheels")
 ## Visually positioning the wheels. Not used at the moment.
@@ -135,3 +141,55 @@ func set_steer_value(steer_value: float) -> void:
 func update_wheel_states(delta: float) -> void:
 	left_wheel.update_state(steer_angle_left, delta)
 	right_wheel.update_state(steer_angle_right, delta)
+
+func _physics_process(delta: float) -> void:
+	# --- Geometric Setup ---
+	if is_solid_axle:
+		# For a solid axle, we enforce the rigid beam constraint first.
+		_update_solid_axle_geometry()
+	else:
+		# For an independent suspension, we calculate and apply anti-roll bar forces.
+		_update_independent_suspension_forces()
+
+	# --- Wheel State Update ---
+	# Now that the geometry and extra forces are set, we tell each wheel to
+	# update its own state based on its (potentially new) position.
+	left_wheel.update_state(steer_angle_left, delta)
+	right_wheel.update_state(steer_angle_right, delta)
+
+func _update_solid_axle_geometry():
+	# This method enforces the rigid link between the wheels.
+	# It calculates the axle's tilt and repositions the wheel nodes.
+	# 1. Define the axle's orientation (Basis).
+	# We start with the AxleController's own orientation.
+	var axle_basis = self.global_transform.basis
+
+	# 2. Calculate the tilt based on wheel contact.
+	# Using the contact points from the last physics frame gives us a stable result.
+	if left_wheel.has_contact and right_wheel.has_contact:
+		var left_contact = left_wheel.get_collision_point()
+		var right_contact = right_wheel.get_collision_point()
+
+		# Create a vector representing the tilted axle beam.
+		var axle_right_vector = (right_contact - left_contact).normalized()
+		# Create an up vector that is orthogonal to the axle and the car's forward direction.
+		var axle_up_vector = axle_right_vector.cross(axle_basis.z).normalized()
+		# Create the final forward vector.
+		var axle_forward_vector = axle_up_vector.cross(axle_right_vector).normalized()
+
+		axle_basis = Basis(axle_right_vector, axle_up_vector, axle_forward_vector)
+
+	# 3. Position the wheels at the ends of the tilted axle beam.
+	var half_track = track_width / 2.0
+	left_wheel.global_position = self.global_position - axle_basis.x * half_track
+	right_wheel.global_position = self.global_position + axle_basis.x * half_track
+
+func _update_independent_suspension_forces():
+	# This logic is for the anti-roll bar on independent suspensions. It remains the same.
+	var arb_force: float = 0.0
+	if anti_roll_stiffness > 0.0:
+		var compression_diff = left_wheel.current_spring_length - right_wheel.current_spring_length
+		arb_force = compression_diff * anti_roll_stiffness
+
+	left_wheel.anti_roll_force = arb_force
+	right_wheel.anti_roll_force = - arb_force
