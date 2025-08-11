@@ -94,6 +94,8 @@ func _physics_process(delta: float):
 		var drivetrain_result = drivetrain_controller.update_drivetrain(
 			pedal_controller.get_throttle() if not restrict_gas else 0.0,
 			pedal_controller.get_clutch(),
+			pedal_controller.get_brake(),
+			pedal_controller.get_handbrake(),
 			vehicle_speed,
 			wheel_angular_velocities,
 			grounded,

@@ -12,7 +12,7 @@ signal clutch_overheated()
 ## Rotational inertia of the engine. Determines how quickly the engine can change its speed. (kg⋅m²)
 @export var engine_inertia: float = 0.3
 ## Engine braking torque when throttle is released. (Nm)
-@export var engine_brake_torque: float = 25.0
+@export var engine_brake_torque: float = 30.0
 ## Frictional torque that resists engine rotation, proportional to its angular velocity. (Nm⋅s/rad)
 @export var engine_friction_coefficient: float = 0.006
 ## The engine's idle speed. The engine will attempt to stay at this RPM when not under load. (RPM)
@@ -22,15 +22,15 @@ signal clutch_overheated()
 
 @export_group("Transmission")
 ## Ratios for each gear [-R, N, 1, 2, 3...]. Determines torque multiplication. (Dimensionless)
-@export var gear_ratios: Array[float] = [-2.9, 0.0, 2.66, 1.78, 1.3, 0.9]
+@export var gear_ratios: Array[float] = [-3.382, 0.0, 3.321, 1.902, 1.308, 1.0, 0.838]
 ## Enables or disables automatic gear shifting.
 @export var auto_shift_enabled: bool = true
 ## The engine RPM at which the automatic transmission will initiate an upshift. (RPM)
-@export var upshift_rpm: float = 6000.0
+@export var upshift_rpm: float = 6200.0
 ## The engine RPM below which the automatic transmission will initiate a downshift. (RPM)
-@export var downshift_rpm: float = 3000.0
+@export var downshift_rpm: float = 3500.0
 ## The duration of a gear shift, during which torque is reduced. (Seconds)
-@export var shift_delay: float = 0.5
+@export var shift_delay: float = 0.3
 
 @export_group("Clutch")
 ## Determines how aggressively the clutch locks. Higher values mean a sharper, more "grabby" clutch. (Nm per (rad/s))
@@ -40,9 +40,9 @@ signal clutch_overheated()
 ## Smoothing factor for clutch torque application to prevent sudden jolts. (0-1)
 @export var clutch_smoothing_factor: float = 0.05
 ## The amount of energy the clutch can absorb before its temperature increases by 1°C. (Joules/°C)
-@export var clutch_heat_capacity: float = 500.0
+@export var clutch_heat_capacity: float = 600.0
 ## The rate at which the clutch cools down towards ambient temperature. (Factor/second)
-@export var clutch_cooling_rate: float = 0.5
+@export var clutch_cooling_rate: float = 0.6
 ## The temperature at which the clutch begins to fade and lose its ability to transmit torque. (°C)
 @export var max_operating_temperature: float = 300.0
 
@@ -138,6 +138,8 @@ func initialize_drivetrain(wheel_r: float, diff_ratio: float) -> void:
 func update_drivetrain(
 	throttle_input: float,
 	clutch_pedal: float,
+	brake_pedal: float,
+	handbrake_pull: float,
 	vehicle_speed: float,
 	wheel_angular_velocities: Array[float],
 	is_grounded: bool,
@@ -157,7 +159,7 @@ func update_drivetrain(
 
 	# Update clutch engagement
 	_update_clutch_engagement(
-		throttle_input, clutch_pedal, vehicle_speed, is_grounded, delta
+		throttle_input, clutch_pedal, brake_pedal, handbrake_pull, vehicle_speed, is_grounded, delta
 	)
 
 	# Calculate clutch slip and torque
@@ -258,6 +260,8 @@ func _update_gearbox_state(wheel_angular_velocities: Array[float]) -> void:
 func _update_clutch_engagement(
 	throttle_input: float,
 	clutch_pedal: float,
+	brake_pedal: float,
+	handbrake_pull: float,
 	vehicle_speed: float,
 	is_grounded: bool,
 	delta: float
@@ -272,12 +276,12 @@ func _update_clutch_engagement(
 	# Auto-clutch logic
 	elif auto_clutch_enabled and current_gear_index > 1:
 		target_engagement = _calculate_auto_clutch_engagement(
-			throttle_input, vehicle_speed, is_grounded
+			throttle_input, brake_pedal, handbrake_pull, vehicle_speed, is_grounded
 		)
 	# Manual clutch with assists
 	elif current_gear_index > 1:
 		target_engagement = _apply_clutch_assists(
-			target_engagement, throttle_input, vehicle_speed, is_grounded
+			target_engagement, throttle_input, brake_pedal, handbrake_pull, vehicle_speed, is_grounded
 		)
 
 	# Smooth engagement changes
@@ -292,11 +296,17 @@ func _update_clutch_engagement(
 ## Calculate clutch engagement for auto-clutch mode
 func _calculate_auto_clutch_engagement(
 	throttle_input: float,
+	brake_input: float,
+	handbrake_input: float,
 	vehicle_speed: float,
 	is_grounded: bool
 ) -> float:
 	# No engagement if not grounded or no throttle
 	if not is_grounded:
+		return 0.0
+
+	# Disengage clutch if pressing brakes or handbrake
+	if brake_input > 0.0 or handbrake_input > 0.0:
 		return 0.0
 
 	# Progressive engagement based on RPM and throttle
@@ -324,6 +334,8 @@ func _calculate_auto_clutch_engagement(
 func _apply_clutch_assists(
 	base_engagement: float,
 	throttle_input: float,
+	brake_input: float,
+	handbrake_input: float,
 	vehicle_speed: float,
 	is_grounded: bool
 ) -> float:
@@ -349,6 +361,10 @@ func _apply_clutch_assists(
 	# Launch assist
 	if launch_assist_enabled and vehicle_speed < 5.0 and engine_rpm > launch_assist_rpm_threshold and throttle_input > 0.3:
 		assisted_engagement = _apply_launch_assist(assisted_engagement)
+
+	# Disengage clutch if pressing brakes or handbrake
+	if brake_input > 0.0 or handbrake_input > 0.0:
+		assisted_engagement = 0.0
 
 	return assisted_engagement
 

@@ -49,5 +49,5 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.13577, 0)
 [node name="ChaseCamera" parent="." node_paths=PackedStringArray("target") instance=ExtResource("3_wu8pm")]
 target = NodePath("../BaseVehicle")
 rotation_speed = 24.0
-distance = 6.0
+distance = 7.0
 height = 2.5

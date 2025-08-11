@@ -94,8 +94,9 @@ func _process(_delta: float) -> void:
 	# Debug text for slip values
 	if has_contact:
 		var text_position = global_position + Vector3.UP * 3.0
-		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f" % [smoothed_lon_slip, lat_slip]
-		DebugDraw3D.draw_text(text_position, slip_text)
+		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [smoothed_lon_slip, lat_slip]
+		var load_text = "Load: %.d N" % [local_force.y]
+		DebugDraw3D.draw_text(text_position, slip_text + load_text)
 
 #region Public methods
 func update_state(p_steer_angle: float, delta: float) -> void:

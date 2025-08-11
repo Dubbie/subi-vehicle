@@ -6,23 +6,23 @@ extends Node
 ## simulating the time it takes to press and release a physical pedal.
 
 @export_group("Input Rates")
-@export var OnThrottleRate: float = 0.2
-@export var OffThrottleRate: float = 0.2
+@export var on_throttle_rate: float = 0.2
+@export var off_throttle_rate: float = 0.2
 
-@export var OnBrakeRate: float = 0.05
-@export var OffBrakeRate: float = 0.1
+@export var on_brake_rate: float = 0.05
+@export var off_brake_rate: float = 0.1
 
-@export var OnHandbrakeRate: float = 0.2
-@export var OffHandbrakeRate: float = 0.2
+@export var on_handbrake_rate: float = 0.2
+@export var off_handbrake_rate: float = 0.2
 
-@export var OnClutchRate: float = 0.2
-@export var OffClutchRate: float = 0.2
+@export var on_clutch_rate: float = 0.2
+@export var off_clutch_rate: float = 0.2
 
 @export_group("Input Limits")
-@export var MaxThrottle: float = 1.0
-@export var MaxBrake: float = 1.0
-@export var MaxHandbrake: float = 1.0
-@export var MaxClutch: float = 1.0
+@export var max_throttle: float = 1.0
+@export var max_brake: float = 1.0
+@export var max_handbrake: float = 1.0
+@export var max_clutch: float = 1.0
 
 # Internal variables to store the current state of each pedal.
 var throttle_pedal: float = 0.0
@@ -46,27 +46,27 @@ func process_inputs(
 
 	# Process Throttle Input
 	if gas_pressed:
-		throttle_pedal += OnThrottleRate * tick_rate
+		throttle_pedal += on_throttle_rate * tick_rate
 	else:
-		throttle_pedal -= OffThrottleRate * tick_rate
+		throttle_pedal -= off_throttle_rate * tick_rate
 
 	# Process Brake Input
 	if brake_pressed:
-		brake_pedal += OnBrakeRate * tick_rate
+		brake_pedal += on_brake_rate * tick_rate
 	else:
-		brake_pedal -= OffBrakeRate * tick_rate
+		brake_pedal -= off_brake_rate * tick_rate
 
 	# Process Handbrake Input
 	if handbrake_pressed:
-		handbrake_pull += OnHandbrakeRate * tick_rate
+		handbrake_pull += on_handbrake_rate * tick_rate
 	else:
-		handbrake_pull -= OffHandbrakeRate * tick_rate
+		handbrake_pull -= off_handbrake_rate * tick_rate
 
 	# Process Clutch Input
 	if clutch_pressed:
-		clutch_pedal += OnClutchRate * tick_rate
+		clutch_pedal += on_clutch_rate * tick_rate
 	else:
-		clutch_pedal -= OffClutchRate * tick_rate
+		clutch_pedal -= off_clutch_rate * tick_rate
 
 	# Clamp the values to ensure they stay within the defined min/max range.
 	_apply_limits()
@@ -74,10 +74,10 @@ func process_inputs(
 
 # Internal function to clamp all pedal values.
 func _apply_limits():
-	throttle_pedal = clamp(throttle_pedal, 0.0, MaxThrottle)
-	brake_pedal = clamp(brake_pedal, 0.0, MaxBrake)
-	handbrake_pull = clamp(handbrake_pull, 0.0, MaxHandbrake)
-	clutch_pedal = clamp(clutch_pedal, 0.0, MaxClutch)
+	throttle_pedal = clamp(throttle_pedal, 0.0, max_throttle)
+	brake_pedal = clamp(brake_pedal, 0.0, max_brake)
+	handbrake_pull = clamp(handbrake_pull, 0.0, max_handbrake)
+	clutch_pedal = clamp(clutch_pedal, 0.0, max_clutch)
 
 
 # --- Public Getters ---
