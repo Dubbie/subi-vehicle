@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=13 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
@@ -22,10 +22,10 @@ points = PackedVector3Array(0.578402, 0.256574, -0.394623, 0.574666, 0.4847, -0.
 
 [sub_resource type="Resource" id="Resource_8g4xo"]
 script = ExtResource("4_lavjc")
-peak_longitudinal_friction = 1.05
-peak_lateral_friction = 0.98
-sliding_longitudinal_friction = 0.8
-sliding_lateral_friction = 0.7
+peak_longitudinal_friction = 1.0
+peak_lateral_friction = 0.95
+sliding_longitudinal_friction = 0.65
+sliding_lateral_friction = 0.55
 peak_slip_ratio = 0.11
 peak_slip_angle_deg = 6.5
 longitudinal_stiffness_factor = 17.0
@@ -36,26 +36,7 @@ load_sensitivity = 0.8
 camber_stiffness = 0.08
 relaxation_length = 0.3
 transient_response = 0.8
-ellipse_factor = 1.2
-metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
-
-[sub_resource type="Resource" id="Resource_dc6sd"]
-script = ExtResource("4_lavjc")
-peak_longitudinal_friction = 1.05
-peak_lateral_friction = 0.98
-sliding_longitudinal_friction = 0.8
-sliding_lateral_friction = 0.7
-peak_slip_ratio = 0.11
-peak_slip_angle_deg = 6.5
-longitudinal_stiffness_factor = 17.0
-lateral_stiffness_factor = 16.0
-longitudinal_shape_factor = 2.5
-lateral_shape_factor = 3.0
-load_sensitivity = 0.8
-camber_stiffness = 0.08
-relaxation_length = 0.3
-transient_response = 0.8
-ellipse_factor = 1.2
+ellipse_factor = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "axles")]
@@ -66,6 +47,7 @@ pedal_controller = NodePath("Components/PedalController")
 steering_controller = NodePath("Components/SteeringController")
 drivetrain_controller = NodePath("Components/DrivetrainController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
+physics_sub_steps = 24
 
 [node name="Components" type="Node" parent="."]
 
@@ -82,7 +64,6 @@ script = ExtResource("4_8g4xo")
 torque_curve = SubResource("Curve_dc6sd")
 gear_ratios = Array[float]([-3.382, 0.0, 3.321, 1.902, 1.308, 1.0, 0.759])
 upshift_rpm = 6000.0
-clutch_stiffness = 400.0
 clutch_smoothing_factor = 0.8
 auto_clutch_enabled = true
 metadata/_custom_type_script = "uid://c1yiva241nq0e"
@@ -148,7 +129,7 @@ max_spring_length = 0.18
 spring_stiffness = 19500.0
 spring_damping = 2200.0
 wheel_width = 0.205
-tire_model = SubResource("Resource_dc6sd")
+tire_model = SubResource("Resource_8g4xo")
 left_wheel = NodePath("WheelRL")
 right_wheel = NodePath("WheelRR")
 

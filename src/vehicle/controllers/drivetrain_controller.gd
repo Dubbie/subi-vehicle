@@ -33,18 +33,22 @@ signal clutch_overheated()
 @export var shift_delay: float = 0.3
 
 @export_group("Clutch")
-## Determines how aggressively the clutch locks. Higher values mean a sharper, more "grabby" clutch. (Nm per (rad/s))
-@export var clutch_stiffness: float = 250.0
-## Multiplier on the engine's max torque to determine the clutch's torque capacity. (e.g., 1.2 = 120% of engine torque)
-@export var clutch_capacity_multiplier: float = 1.2
-## Smoothing factor for clutch torque application to prevent sudden jolts. (0-1)
-@export var clutch_smoothing_factor: float = 0.05
-## The amount of energy the clutch can absorb before its temperature increases by 1°C. (Joules/°C)
+## Maximum torque the clutch can transmit when fully engaged. (Nm)
+@export var clutch_torque_capacity: float = 320.0
+## Static friction coefficient - higher torque capacity when locked up.
+@export var static_friction_multiplier: float = 1.15
+## Speed difference below which clutch attempts to lock up. (RPM)
+@export var lockup_slip_threshold: float = 50.0
+## Smoothing factor for clutch torque to prevent numerical instability. (0-1)
+@export var clutch_smoothing_factor: float = 0.1
+## The amount of energy the clutch can absorb before temperature increases by 1°C. (Joules/°C)
 @export var clutch_heat_capacity: float = 600.0
 ## The rate at which the clutch cools down towards ambient temperature. (Factor/second)
 @export var clutch_cooling_rate: float = 0.6
-## The temperature at which the clutch begins to fade and lose its ability to transmit torque. (°C)
-@export var max_operating_temperature: float = 300.0
+## Temperature at which clutch capacity begins to fade. (°C)
+@export var fade_start_temperature: float = 250.0
+## Temperature at which clutch is completely ineffective. (°C)
+@export var fade_complete_temperature: float = 400.0
 
 @export_group("Smart Assists")
 ## Enables or disables the system that automatically disengages the clutch to prevent stalling.
@@ -162,20 +166,52 @@ func update_drivetrain(
 		throttle_input, clutch_pedal, brake_pedal, handbrake_pull, vehicle_speed, is_grounded, delta
 	)
 
-	# Calculate clutch slip and torque
+	# Calculate clutch slip and determine operating mode
 	var slip_velocity = engine_angular_velocity - gearbox_angular_velocity
 	clutch_slip_rpm = abs(slip_velocity * RADS_TO_RPM)
 
-	# Calculate clutch torque capacity
-	var max_clutch_torque = _get_max_clutch_torque()
-	var target_clutch_torque = clampf(
-		slip_velocity * clutch_stiffness * clutch_engagement,
-		- max_clutch_torque,
-		max_clutch_torque
-	)
+	# Get current clutch capacity (affected by temperature and wear)
+	var max_clutch_capacity = _get_clutch_capacity()
 
-	# Smooth clutch torque
-	clutch_torque = lerp(clutch_torque, target_clutch_torque, clutch_smoothing_factor)
+	# Determine if we should try to lock up or slip
+	var should_attempt_lockup = clutch_slip_rpm < lockup_slip_threshold and clutch_engagement > 0.95
+
+	if should_attempt_lockup:
+		# Try to lock up - calculate what torque is needed
+		var engine_torque_available = 0.0
+		if torque_curve:
+			engine_torque_available = torque_curve.sample_baked(engine_rpm) * clampf(throttle_input, 0.0, 1.0)
+
+		# Apply engine braking and friction
+		var friction_torque = engine_friction_coefficient * engine_angular_velocity
+		var brake_torque = engine_brake_torque * (1.0 - clampf(throttle_input, 0.0, 1.0))
+		var net_engine_torque = engine_torque_available - friction_torque - brake_torque
+
+		# Check if clutch can handle the demanded torque
+		var static_capacity = max_clutch_capacity * static_friction_multiplier
+		if abs(net_engine_torque) <= static_capacity:
+			# Lock up successful - transmit the demanded torque
+			clutch_torque = net_engine_torque
+			# Force speed matching for next frame (simulate locked condition)
+			if abs(slip_velocity) > 0.1:
+				# Apply strong corrective torque to minimize slip
+				var speed_correction = slip_velocity * 100.0 # Strong coupling when locked
+				clutch_torque += speed_correction
+		else:
+			# Demanded torque exceeds static capacity - must slip
+			clutch_torque = sign(net_engine_torque) * max_clutch_capacity
+	else:
+		# Slipping mode - kinetic friction
+		if abs(slip_velocity) < 0.01: # Nearly zero slip
+			clutch_torque = 0.0
+		else:
+			clutch_torque = sign(slip_velocity) * max_clutch_capacity
+
+	# Apply clutch engagement factor
+	clutch_torque *= clutch_engagement
+
+	# Smooth the torque to prevent numerical instability
+	clutch_torque = lerp(clutch_torque, clutch_torque, clutch_smoothing_factor)
 
 	# Update engine with clutch reaction torque
 	_update_engine(throttle_input, clutch_torque, delta)
@@ -189,7 +225,7 @@ func update_drivetrain(
 		output_torque = clutch_torque * current_gear_ratio
 
 	# Update thermal and wear simulation
-	_update_clutch_condition(delta)
+	_update_clutch_condition(slip_velocity, delta)
 
 	# Return comprehensive state
 	return {
@@ -392,41 +428,52 @@ func _get_clutch_engagement_speed(target_engagement: float) -> float:
 		return 10.0 # Fast manual response
 
 ## Calculate maximum clutch torque capacity
-func _get_max_clutch_torque() -> float:
-	var max_engine_torque = 0.0
-	if torque_curve:
-		max_engine_torque = torque_curve.sample_baked(engine_rpm)
+func _get_clutch_capacity() -> float:
+	var base_capacity = clutch_torque_capacity
 
-	var max_torque = max_engine_torque * clutch_capacity_multiplier * clutch_engagement
+	# Apply wear effects - linear degradation
+	base_capacity *= (1.0 - clutch_wear * 0.4) # Up to 40% capacity loss when fully worn
 
-	# Apply wear effects
-	max_torque *= (1.0 - clutch_wear * 0.3)
+	# Apply temperature fade effects
+	if clutch_temperature > fade_start_temperature:
+		var fade_progress = (clutch_temperature - fade_start_temperature) / (fade_complete_temperature - fade_start_temperature)
+		fade_progress = clampf(fade_progress, 0.0, 1.0)
+		# Smooth fade curve - more realistic than linear
+		var fade_factor = 1.0 - (fade_progress * fade_progress) # Quadratic fade
+		base_capacity *= fade_factor
 
-	# Apply temperature effects
-	if clutch_temperature > max_operating_temperature:
-		max_torque *= 0.7
-		if clutch_temperature > max_operating_temperature + 50.0:
+		# Emit overheating signal when capacity drops significantly
+		if fade_factor < 0.5:
 			clutch_overheated.emit()
 
-	return max_torque
+	return max(base_capacity, 0.0)
 
 ## Update clutch temperature and wear
-func _update_clutch_condition(delta: float) -> void:
-	# Heat generation from slip
-	var power_dissipated = (clutch_slip_rpm * PI / 30.0) * abs(clutch_torque)
-	var heat_generated = power_dissipated * delta
+func _update_clutch_condition(slip_velocity: float, delta: float) -> void:
+	# Heat generation from friction work
+	# Power = Torque × Angular_velocity_difference
+	var friction_power = abs(clutch_torque * slip_velocity) # Watts
+	var heat_generated = friction_power * delta # Joules
+
+	# Convert to temperature increase
 	var temperature_increase = heat_generated / clutch_heat_capacity
 	clutch_temperature += temperature_increase
 
-	# Cooling
-	var cooling = (clutch_temperature - 20.0) * clutch_cooling_rate * delta
-	clutch_temperature = max(20.0, clutch_temperature - cooling)
+	# Cooling - Newton's law of cooling
+	var ambient_temp = 20.0
+	var cooling = (clutch_temperature - ambient_temp) * clutch_cooling_rate * delta
+	clutch_temperature = max(ambient_temp, clutch_temperature - cooling)
 
-	# Wear calculation
-	var wear_rate = (clutch_slip_rpm / 1000.0) * (abs(clutch_torque) / 1000.0) * delta * 0.001
-	if clutch_temperature > 200.0:
-		wear_rate *= 1.0 + ((clutch_temperature - 200.0) / 100.0)
-	clutch_wear = min(1.0, clutch_wear + wear_rate)
+	# Wear calculation - based on slip energy and temperature
+	if clutch_slip_rpm > 10.0: # Only wear when actually slipping
+		var base_wear_rate = (clutch_slip_rpm / 5000.0) * (abs(clutch_torque) / 500.0) * delta * 0.0005
+
+		# Accelerated wear at high temperatures
+		var temperature_factor = 1.0
+		if clutch_temperature > 200.0:
+			temperature_factor = 1.0 + ((clutch_temperature - 200.0) / 100.0)
+
+		clutch_wear = min(1.0, clutch_wear + base_wear_rate * temperature_factor)
 
 ## Pre-calculate shift points for each gear
 func _calculate_shift_speeds() -> void:
