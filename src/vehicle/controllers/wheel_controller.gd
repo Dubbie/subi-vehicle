@@ -11,6 +11,11 @@ var suspension_damping: float = 1350.0 # Damping force in Ns/m
 var suspension_max_length: float = 0.21 # Max travel distance in meters
 
 var tire_model: BaseTireModel
+
+# Suspension Geometry from Axle
+var camber_angle_deg: float = 0.0
+var caster_angle_deg: float = 0.0
+var toe_angle_deg: float = 0.0
 #endregion
 
 #region Internal
@@ -54,7 +59,10 @@ var lat_force_vector: Vector3 = Vector3.ZERO
 
 # --- Node References ---
 @onready var car: VehicleController = get_owner()
-@onready var wheel_marker: Marker3D = $Animation/Camber/Wheel
+# Get references to the nodes in the visual hierarchy
+@onready var animation_node: Marker3D = $Animation
+@onready var camber_node: Marker3D = $Animation/Camber
+@onready var wheel_node: Marker3D = $Animation/Camber/Wheel
 
 func _ready() -> void:
 	target_position = Vector3.DOWN * (suspension_max_length + wheel_radius)
@@ -71,27 +79,42 @@ func _ready() -> void:
 	add_exception(car)
 
 func _process(_delta: float) -> void:
-	# We use current_spring_length for responsiveness.
-	wheel_marker.position = Vector3.DOWN * current_spring_length
+	# This function now handles updating the visual representation of the wheel
+	# using the node hierarchy (Animation -> Camber -> Wheel).
+	# 1. Suspension Travel
+	# The 'Animation' node moves up and down along the Y-axis.
+	animation_node.position.y = - current_spring_length
 
-	# Create a pure steering rotation (Yaw around the Y-axis)
-	var steer_rotation = Basis().rotated(Vector3.UP, deg_to_rad(current_steer_angle))
+	# 2. Caster and Steering
+	# The caster angle tilts the local UP axis to create the final steering axis.
+	# The 'Animation' node rotates around this tilted axis. This correctly
+	# simulates the visual effect of caster causing camber change during steering.
+	var caster_rad = deg_to_rad(caster_angle_deg)
+	var steer_rad = deg_to_rad(current_steer_angle)
+	var steering_axis = Vector3.UP.rotated(Vector3.RIGHT, caster_rad)
+	animation_node.basis = Basis().rotated(steering_axis, steer_rad)
 
-	# Create a pure spin rotation (Roll around the X-axis)
+	# 3. Camber
+	# The 'Camber' node applies a static rotation around its local FORWARD axis.
+	# Since it's a child of the steering node, this is applied correctly after steering.
+	var camber_rad = deg_to_rad(camber_angle_deg)
+	camber_node.basis = Basis().rotated(Vector3.FORWARD, camber_rad)
+
+	# 4. Toe and Wheel Spin
+	# The final 'Wheel' node applies toe (static yaw) and then the wheel spin (dynamic roll).
+	var toe_rad = deg_to_rad(toe_angle_deg)
+	var toe_rotation = Basis().rotated(Vector3.UP, toe_rad)
 	var spin_rotation = Basis().rotated(Vector3.RIGHT, -delta_rotation)
+	wheel_node.basis = toe_rotation * spin_rotation
 
-	# Combine the rotations.
-	wheel_marker.basis = steer_rotation * spin_rotation
-
+	# --- Debug Drawing ---
 	if not debug_mode or not has_contact: return
 
-	# Debug drawing
 	var force_scale: float = car.mass
 	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lat_force_vector / force_scale), Color.RED, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lon_force_vector / force_scale), Color.BLUE, 0.1)
 
-	# Debug text for slip values
 	if has_contact:
 		var text_position = global_position + Vector3.UP * 3.0
 		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [smoothed_lon_slip, lat_slip]
@@ -109,26 +132,15 @@ func _update_spring_and_contact(delta: float) -> void:
 	has_contact = is_colliding()
 
 	if has_contact:
-		# Get the distance to the collision point
 		contact_point = get_collision_point()
 		contact_normal = get_collision_normal()
-
 		var ray_length = global_position.distance_to(get_collision_point())
-
-		# Calculate the current spring length
 		current_spring_length = ray_length - wheel_radius
-
-		# --- Suspension Force Calculation (Hooke's Law) ---
 		var spring_depth = suspension_max_length - current_spring_length
 		var spring_force = suspension_stiffness * spring_depth
-
-		# --- Damper Force Calculation ---
 		var spring_speed = (last_spring_length - current_spring_length) / delta
 		var damper_force = suspension_damping * spring_speed
-
-		# --- Suspension Force ---
 		var suspension_force = max(0.0, spring_force + damper_force)
-
 		local_force.y = suspension_force
 		load_force_vector = (suspension_force * knuckle_up.y) * get_collision_normal()
 	else:
@@ -137,72 +149,47 @@ func _update_spring_and_contact(delta: float) -> void:
 		local_force.y = 0.0
 		load_force_vector = Vector3.ZERO
 
-	# Update the last spring length for the next frame's calculation
 	last_spring_length = current_spring_length
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
 	drive_torque = current_drive_torque
-
-	# Apply motor torque to spin the wheel up
 	current_angular_velocity += drive_torque * inertia_inverse * delta
-
-	# Rolling Resistance and Braking
-	var crr = 0.015 # Coefficient of Rolling Resistance - Tweak this value!
-	var rolling_resistance_force = crr * local_force.y # Based on normal force
+	var crr = 0.015
+	var rolling_resistance_force = crr * local_force.y
 	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
-
-	# Apply it in the correct direction
 	rolling_resistance_torque *= -sign(current_angular_velocity)
 	var total_resist_torque = current_brake_torque + rolling_resistance_torque
 	var w_brake = total_resist_torque * inertia_inverse * delta
-
 	if w_brake > abs(current_angular_velocity):
 		current_angular_velocity = 0.0
 	else:
 		current_angular_velocity -= sign(current_angular_velocity) * w_brake
 
-	# --- Tire Force Calculation ---
 	var tire_forces = Vector2.ZERO
 	if has_contact:
 		var surface_speed = current_angular_velocity * wheel_radius
-
-		# Calculate slip values
-		# Longitudinal Slip Ratio (a dimensionless number)
 		lon_slip = (surface_speed - contact_lon_velocity) / max(abs(contact_lon_velocity), 0.1)
 		smoothed_lon_slip = lerp(smoothed_lon_slip, lon_slip, 0.1)
-
-		# Lateral Slip Angle (in radians)
 		lat_slip = atan2(-contact_lat_velocity, abs(contact_lon_velocity))
 
-		# --- DELEGATE TO THE TIRE MODEL ---
-		# Bundle up all the data the tire model needs
 		var model_params = TireParams.new()
 		model_params.vertical_load = local_force.y
 		model_params.lon_slip_ratio = lon_slip
 		model_params.lat_slip_angle_rad = lat_slip
-		model_params.surface_friction = dyn_muk # Pass dynamic friction
+		model_params.surface_friction = dyn_muk
 		model_params.longitudinal_velocity = contact_lon_velocity
 		model_params.wheel_angular_velocity = current_angular_velocity
 		model_params.wheel_radius = wheel_radius
 		model_params.delta = delta
-
-		# Call the model to get the forces
 		tire_forces = tire_model.calculate_forces(model_params)
 
-	# Assign the calculated forces
-	local_force.x = tire_forces.x # Lateral force
-	local_force.z = tire_forces.y # Longitudinal force
-
-	# Apply traction back to wheel
+	local_force.x = tire_forces.x
+	local_force.z = tire_forces.y
 	var t_traction = local_force.z * wheel_radius
 	var w_traction = t_traction * inertia_inverse * delta
 	current_angular_velocity -= w_traction
-
-	# Update visual rotation
 	delta_rotation += current_angular_velocity * delta
 	delta_rotation = fposmod(delta_rotation, 2 * PI)
-
-	# Save final world-space force vectors
 	lon_force_vector = contact_forward * local_force.z
 	lat_force_vector = contact_right * local_force.x
 
@@ -216,24 +203,23 @@ func apply_forces_to_rigidbody():
 
 #region Private methods
 func _update_knuckle(steer_angle: float) -> void:
-	# Store the current angle so the _process function can use it for visuals
 	current_steer_angle = steer_angle
-
-	# 1. Get the wheel's base orientation vectors in world space from the parent node.
 	var right_vec = global_transform.basis.x
 	var up_vec = global_transform.basis.y
 	var fwd_vec = global_transform.basis.z
-
-	# 2. Define the pivot axis for steering (the "up" direction of the suspension).
-	var pivot_axis = up_vec
-
-	# 3. Calculate the rotation in radians, inverting the sign to match Godot's coordinate system.
-	var rotation_rads = deg_to_rad(steer_angle)
-
-	# 4. Rotate the base vectors to get the final "knuckle" orientation.
-	knuckle_forward = fwd_vec.rotated(pivot_axis, rotation_rads)
-	knuckle_right = right_vec.rotated(pivot_axis, rotation_rads)
-	knuckle_up = up_vec # The suspension axis itself does not rotate.
+	var steer_rad = deg_to_rad(steer_angle)
+	var camber_rad = deg_to_rad(camber_angle_deg)
+	var caster_rad = deg_to_rad(caster_angle_deg)
+	var toe_rad = deg_to_rad(toe_angle_deg)
+	var fwd_with_toe = fwd_vec.rotated(up_vec, toe_rad)
+	var right_with_toe = right_vec.rotated(up_vec, toe_rad)
+	var pivot_axis = up_vec.rotated(right_with_toe, caster_rad)
+	var fwd_steered = fwd_with_toe.rotated(pivot_axis, steer_rad)
+	var right_steered = right_with_toe.rotated(pivot_axis, steer_rad)
+	var up_steered = up_vec.rotated(pivot_axis, steer_rad)
+	knuckle_forward = fwd_steered
+	knuckle_right = right_steered.rotated(knuckle_forward, -camber_rad)
+	knuckle_up = up_steered.rotated(knuckle_forward, -camber_rad)
 
 func _update_contact_velocities() -> void:
 	if has_contact:

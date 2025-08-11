@@ -29,6 +29,15 @@ extends Node3D
 ## Damping of the suspension spring when compressing.
 @export var spring_damping: float = 1350.0 # Ns/m
 
+@export_group("Suspension Geometry")
+## Camber angle in degrees. Negative camber tilts the top of the wheel inwards.
+@export var camber_angle_deg: float = -1.0 # Degrees
+## Caster angle in degrees. Positive caster tilts the steering axis backwards.
+@export var caster_angle_deg: float = 5.0 # Degrees
+## Toe angle in degrees. Positive for toe-in (front of wheels point inwards).
+@export var toe_angle_deg: float = 0.1 # Degrees
+
+
 @export_group("Wheels")
 ## Visually positioning the wheels. Not used at the moment.
 @export var suspension_y_offset: float = 0.0 # m
@@ -59,7 +68,8 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 
 	# Set up the wheels to use the axle's configuration.
 	var wheels: Array[WheelController] = [left_wheel, right_wheel]
-	for wheel in wheels:
+	for i in range(wheels.size()):
+		var wheel = wheels[i]
 		# Tire model
 		wheel.tire_model = tire_model.duplicate()
 
@@ -72,6 +82,16 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 		wheel.wheel_mass = wheel_mass
 		wheel.wheel_radius = wheel_radius
 		wheel.wheel_width = wheel_width
+
+		# Suspension Geometry
+		wheel.camber_angle_deg = camber_angle_deg
+		wheel.caster_angle_deg = caster_angle_deg
+		# Apply toe symmetrically. Positive toe makes wheels point inward.
+		# The right wheel gets a positive angle (yaws left), left wheel gets negative (yaws right).
+		if i == 0: # Left Wheel
+			wheel.toe_angle_deg = - toe_angle_deg
+		else: # Right Wheel
+			wheel.toe_angle_deg = toe_angle_deg
 
 	# If this axle can't steer, we're done.
 	if p_max_steer_angle_deg <= 0.0:
