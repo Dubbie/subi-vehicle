@@ -33,7 +33,9 @@ enum DifferentialType {
 ## Stiffness of the suspension spring.
 @export var spring_stiffness: float = 25000.0 # N/m
 ## Damping of the suspension spring when compressing.
-@export var spring_damping: float = 1350.0 # Ns/m
+@export var spring_bump_damping: float = 1350.0 # Ns/m
+## Damping of the suspension spring when extending.
+@export var spring_rebound_damping: float = 3375.0 # Ns/m
 ## The stiffness of the anti-roll bar. Only used for independent suspension.
 ## A higher value reduces body roll. Set to 0 to disable.
 @export var anti_roll_stiffness: float = 8000.0 # N/m
@@ -119,7 +121,8 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 
 		# Suspension
 		wheel.suspension_stiffness = spring_stiffness
-		wheel.suspension_damping = spring_damping
+		wheel.suspension_bump_damping = spring_bump_damping
+		wheel.suspension_rebound_damping = spring_rebound_damping
 		wheel.suspension_max_length = max_spring_length
 
 		# Wheel properties

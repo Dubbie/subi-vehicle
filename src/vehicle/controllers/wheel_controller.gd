@@ -7,8 +7,9 @@ var wheel_mass: float = 18.0 # kg
 var wheel_width: float = 0.18 # meters
 
 var suspension_stiffness: float = 25000.0 # Spring force in Newtons per meter (N/m)
-var suspension_damping: float = 1350.0 # Damping force in Ns/m
-var suspension_max_length: float = 0.21 # Max travel distance in meters
+var suspension_bump_damping: float = 1350.0
+var suspension_rebound_damping: float = 3350.0
+var suspension_max_length: float = 0.18 # Max travel distance in meters
 
 var tire_model: BaseTireModel
 
@@ -143,32 +144,51 @@ func _update_spring_and_contact(delta: float) -> void:
 
 		# Clamp spring length to valid range
 		current_spring_length = clamp(current_spring_length, 0.0, suspension_max_length)
-
-		# --- Spring Force (Hooke's Law) ---
-		var spring_compression = suspension_max_length - current_spring_length
-		var spring_force = suspension_stiffness * spring_compression
-
-		# --- Damper Force ---
-		# Positive spring_speed = extending, negative = compressing
-		var spring_speed = (current_spring_length - last_spring_length) / delta
-		var damper_force = suspension_damping * spring_speed
-
-		# --- Total Suspension Force ---
-		# Spring force is always upward (positive), damper opposes motion
-		# Add anti-roll force (will be 0 for solid axles)
-		var total_suspension_force = max(0.0, spring_force - damper_force + anti_roll_force)
-
-		# Store the force magnitude
-		local_force.y = total_suspension_force
-
-		# Create the actual force vector in world space
-		load_force_vector = total_suspension_force * contact_normal
 	else:
+		# When not in contact, spring extends to maximum length
 		contact_point = Vector3.ZERO
 		contact_normal = Vector3.UP
 		current_spring_length = suspension_max_length
-		local_force.y = 0.0
-		load_force_vector = Vector3.ZERO
+
+	# --- Spring Force Calculation (Always based on compression from rest length) ---
+	var compression_distance = suspension_max_length - current_spring_length
+	var spring_force = suspension_stiffness * compression_distance
+
+	# --- Damper Force Calculation ---
+	# Calculate spring velocity (positive = extending, negative = compressing)
+	var spring_velocity = (current_spring_length - last_spring_length) / delta
+
+	# Separate bump (compression) and rebound (extension) damping
+	var damper_force: float
+	if spring_velocity < 0.0: # Compressing (bump)
+		damper_force = suspension_bump_damping * abs(spring_velocity)
+	else: # Extending (rebound)
+		damper_force = - suspension_rebound_damping * spring_velocity
+
+	# --- Total Suspension Force ---
+	# Spring force always pushes up when compressed
+	# Damper force opposes motion
+	# Anti-roll force can push up or down depending on body roll
+	var total_suspension_force = spring_force + damper_force + anti_roll_force
+
+	# Apply force limits based on contact
+	if has_contact:
+		# When in contact, force can't be negative (can't pull through ground)
+		total_suspension_force = max(0.0, total_suspension_force)
+
+		# Store the force magnitude and create world space vector
+		local_force.y = total_suspension_force
+		load_force_vector = total_suspension_force * contact_normal
+	else:
+		# When not in contact, allow negative force (spring tries to pull wheel down)
+		# But limit how much it can pull to prevent unrealistic behavior
+		var max_pull_force = suspension_stiffness * 0.1 # 10% of max spring force
+		total_suspension_force = max(-max_pull_force, total_suspension_force)
+
+		# Store the force magnitude (negative means pulling down)
+		local_force.y = total_suspension_force
+		# Apply force along the wheel's up direction (not contact normal since no contact)
+		load_force_vector = total_suspension_force * global_transform.basis.y
 
 	last_spring_length = current_spring_length
 
