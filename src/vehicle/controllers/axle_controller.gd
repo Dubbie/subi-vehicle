@@ -1,6 +1,12 @@
 class_name AxleController
 extends Node3D
 
+enum DifferentialType {
+	OPEN,
+	LOCKED,
+	LIMITED_SLIP
+}
+
 #region Export variables
 ## Label for debugging purposes.
 @export var label_prefix: String = "Axle"
@@ -44,6 +50,20 @@ extends Node3D
 ## If true, the axle is simulated as a solid beam. If false, it's an independent suspension.
 @export var is_solid_axle: bool = false
 
+@export_group("Differential")
+## The type of differential to simulate for this axle.
+@export var differential_type: DifferentialType = DifferentialType.OPEN
+## For Limited-Slip Differentials, this determines the percentage of power to lock.
+## A value of 0.25 means it can transfer up to 25% of the input torque to the gripping wheel.
+## Good values are between 0.2 (light LSD) and 0.75 (very aggressive).
+@export_range(0.0, 1.0) var lsd_power_lock_factor: float = 0.3
+## The speed difference (in rad/s) at which the LSD achieves maximum lock.
+## A lower value makes the LSD react faster and more aggressively. Good values: 5.0 to 20.0
+@export var lsd_engagement_speed: float = 10.0
+## For a Locked Differential, this determines how rigidly it forces the wheels
+## to the same speed. This needs to be a very high value to overcome engine torque.
+@export var locking_stiffness: float = 5000.0
+
 @export_group("Wheels")
 ## Visually positioning the wheels. Not used at the moment.
 @export var suspension_y_offset: float = 0.0 # m
@@ -69,6 +89,24 @@ var _max_angle_inner_rad: float = 0.0
 var _max_angle_outer_rad: float = 0.0
 #endregion
 
+#region Physics
+func _physics_process(delta: float) -> void:
+	# --- Geometric Setup ---
+	if is_solid_axle:
+		# For a solid axle, we enforce the rigid beam constraint first.
+		_update_solid_axle_geometry()
+	else:
+		# For an independent suspension, we calculate and apply anti-roll bar forces.
+		_update_independent_suspension_forces()
+
+	# --- Wheel State Update ---
+	# Now that the geometry and extra forces are set, we tell each wheel to
+	# update its own state based on its (potentially new) position.
+	left_wheel.update_state(steer_angle_left, delta)
+	right_wheel.update_state(steer_angle_right, delta)
+#endregion
+
+#region Public API
 func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 	_wheelbase = p_wheelbase
 
@@ -142,21 +180,63 @@ func update_wheel_states(delta: float) -> void:
 	left_wheel.update_state(steer_angle_left, delta)
 	right_wheel.update_state(steer_angle_right, delta)
 
-func _physics_process(delta: float) -> void:
-	# --- Geometric Setup ---
-	if is_solid_axle:
-		# For a solid axle, we enforce the rigid beam constraint first.
-		_update_solid_axle_geometry()
-	else:
-		# For an independent suspension, we calculate and apply anti-roll bar forces.
-		_update_independent_suspension_forces()
+func get_distributed_torques(total_axle_torque: float) -> Vector2:
+	var torque_left: float = 0.0
+	var torque_right: float = 0.0
 
-	# --- Wheel State Update ---
-	# Now that the geometry and extra forces are set, we tell each wheel to
-	# update its own state based on its (potentially new) position.
-	left_wheel.update_state(steer_angle_left, delta)
-	right_wheel.update_state(steer_angle_right, delta)
+	match differential_type:
+		DifferentialType.OPEN:
+			# For a simple simulation, both Open and Locked differentials start with a 50/50 torque split.
+			# - An Open diff is limited by the wheel with the least grip. Our tire model handles this naturally
+			#   by allowing the low-grip wheel to spin up (slip).
+			# - A Locked diff forces wheels to the same speed. The tire model creates counteracting forces
+			#   when they are forced to slip against the road surface, simulating the lock.
+			torque_left = total_axle_torque * 0.5
+			torque_right = total_axle_torque * 0.5
 
+		DifferentialType.LOCKED:
+			var wheel_speed_left_rads = left_wheel.current_angular_velocity
+			var wheel_speed_right_rads = right_wheel.current_angular_velocity
+			var speed_difference = wheel_speed_left_rads - wheel_speed_right_rads
+
+			# 1. Calculate a massive corrective torque based on the speed difference and a high stiffness value.
+			# This simulates a near-rigid connection between the wheels.
+			var correction_torque = speed_difference * locking_stiffness
+
+			# 2. Apply this torque to counteract the speed difference.
+			# It's subtracted from the faster wheel and added to the slower wheel.
+			torque_left = (total_axle_torque * 0.5) - correction_torque
+			torque_right = (total_axle_torque * 0.5) + correction_torque
+
+		DifferentialType.LIMITED_SLIP:
+			var wheel_speed_left_rads = left_wheel.current_angular_velocity
+			var wheel_speed_right_rads = right_wheel.current_angular_velocity
+			var speed_difference = wheel_speed_left_rads - wheel_speed_right_rads
+
+			# 1. Determine the maximum possible locking torque based on input power.
+			var max_locking_torque = total_axle_torque * lsd_power_lock_factor
+
+			# 2. Determine how much of that lock to apply based on the slip speed.
+			# This creates a smooth engagement instead of an instant, jerky lock.
+			var engagement_factor = clamp(abs(speed_difference) / lsd_engagement_speed, 0.0, 1.0)
+
+			# 3. Calculate the final locking torque.
+			var locking_torque = max_locking_torque * engagement_factor
+
+			# The locking torque is applied from the faster wheel to the slower wheel.
+			# The sign of speed_difference tells us which way to apply it.
+			locking_torque *= -sign(speed_difference)
+
+			# Start with a 50/50 split and then apply the locking torque.
+			torque_left = (total_axle_torque * 0.5) + locking_torque
+			torque_right = (total_axle_torque * 0.5) - locking_torque
+
+			# Debug
+			# print("Axle: ", name, " SpeedDiff: ", speed_difference, " LockingTorque: ", locking_torque, " TotalAxleTorque: ", total_axle_torque)
+
+	return Vector2(torque_left, torque_right)
+
+#region Private API
 func _update_solid_axle_geometry():
 	# This method enforces the rigid link between the wheels.
 	# It calculates the axle's tilt and repositions the wheel nodes.

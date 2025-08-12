@@ -121,8 +121,8 @@ func _validate_components() -> bool:
 		return false
 	return true
 
+## Process all user inputs
 func _process_user_controls(delta: float):
-	"""Process all user inputs"""
 	var gas_input = Input.is_action_pressed("gas") and not restrict_gas
 	var brake_input = Input.is_action_pressed("brake")
 	var handbrake_input = Input.is_action_pressed("handbrake")
@@ -138,8 +138,8 @@ func _process_user_controls(delta: float):
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, delta)
 	steering_controller.process_inputs(steer_input, delta)
 
-func _update_axles(delta: float):
-	"""Update all axles and check ground contact"""
+## Update all axles and check ground contact
+func _update_axles(delta: float) -> void:
 	grounded = false
 
 	for i in range(axles.size()):
@@ -155,8 +155,8 @@ func _update_axles(delta: float):
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
 			grounded = true
 
+## Get angular velocities of driven wheels for drivetrain calculation
 func _get_driven_wheel_speeds() -> Array[float]:
-	"""Get angular velocities of driven wheels for drivetrain calculation"""
 	var speeds: Array[float] = []
 
 	for axle in _driven_axles:
@@ -165,47 +165,51 @@ func _get_driven_wheel_speeds() -> Array[float]:
 
 	return speeds
 
-func _apply_wheel_forces():
-	"""Apply all wheel forces to the vehicle rigidbody"""
+## Apply all wheel forces to the vehicle rigidbody
+func _apply_wheel_forces() -> void:
 	for axle in axles:
 		axle.left_wheel.apply_forces_to_rigidbody()
 		axle.right_wheel.apply_forces_to_rigidbody()
 
-func _apply_wheel_torques(delta: float):
-	"""Apply drivetrain and brake torques to wheels"""
+## Apply drivetrain and brake torques to wheels
+func _apply_wheel_torques(delta: float) -> void:
 	var brake_torque = pedal_controller.get_brake() * max_brake_torque
 	var handbrake_torque = pedal_controller.get_handbrake() * max_handbrake_torque
 
 	for axle in axles:
-		# Calculate drive torque for this axle
+		# Calculate total drive torque for this axle from the drivetrain
 		var axle_drive_torque = 0.0
 		if axle.drive_ratio > 0.0:
 			axle_drive_torque = current_drivetrain_torque * axle.diff_ratio
 
-		# Distribute drive torque per wheel
-		var drive_torque_per_wheel = axle_drive_torque / 2.0
+		# --- MODIFIED PART ---
+		# Get the distributed drive torques from the axle's differential simulation
+		var distributed_drive_torques: Vector2 = axle.get_distributed_torques(axle_drive_torque)
+		var drive_torque_left = distributed_drive_torques.x
+		var drive_torque_right = distributed_drive_torques.y
+		# --- END OF MODIFICATION ---
 
-		# Calculate brake torque per wheel
+		# Calculate brake torque per wheel (this remains the same)
 		var brake_torque_per_wheel = brake_torque * axle.brake_ratio
 		var handbrake_per_wheel = handbrake_torque * axle.handbrake_ratio
 
-		# Apply to wheels
+		# Apply the final calculated torques to each wheel
 		axle.left_wheel.calculate_wheel_physics(
-			drive_torque_per_wheel,
+			drive_torque_left, # Use the new value
 			brake_torque_per_wheel + handbrake_per_wheel,
-			1.0, # Load transfer (could be calculated)
+			1.0,
 			delta
 		)
 
 		axle.right_wheel.calculate_wheel_physics(
-			drive_torque_per_wheel,
+			drive_torque_right, # Use the new value
 			brake_torque_per_wheel + handbrake_per_wheel,
-			1.0, # Load transfer (could be calculated)
+			1.0,
 			delta
 		)
 
-func _setup_axles():
-	"""Initialize axle configuration and calculate vehicle geometry"""
+## Initialize axle configuration and calculate vehicle geometry
+func _setup_axles() -> void:
 	if axles.size() < 2:
 		push_error("Vehicle requires at least 2 axles")
 		return
@@ -233,8 +237,8 @@ func _setup_axles():
 
 	print("Found %d driven axles" % _driven_axles.size())
 
+## Initialize the drivetrain with vehicle-specific parameters
 func _initialize_drivetrain():
-	"""Initialize the drivetrain with vehicle-specific parameters"""
 	if _driven_axles.is_empty():
 		push_error("No driven axles found")
 		return
@@ -246,8 +250,8 @@ func _initialize_drivetrain():
 		primary_axle.diff_ratio
 	)
 
+## Update debug information display
 func _update_debug_display():
-	"""Update debug information display"""
 	if not engine_label:
 		return
 
@@ -298,18 +302,18 @@ func _update_debug_display():
 #endregion
 
 #region Signal Handlers
-func _on_gear_changed(old_gear: int, new_gear: int):
-	"""Handle gear change completion"""
+## Handle gear change completion
+func _on_gear_changed(old_gear: int, new_gear: int) -> void:
 	restrict_gas = false
 	print("Gear changed from %d to %d" % [old_gear, new_gear])
 
-func _on_engine_stalled():
-	"""Handle engine stall event"""
+## Handle engine stall event
+func _on_engine_stalled() -> void:
 	print("Engine stalled!")
 	# Could trigger stall recovery logic or audio cues
 
-func _on_clutch_overheated():
-	"""Handle clutch overheating"""
+## Handle clutch overheating
+func _on_clutch_overheated() -> void:
 	print("Clutch overheated!")
 	# Could trigger warning indicators or performance reduction
 #endregion
@@ -330,16 +334,16 @@ func get_vehicle_speed() -> float:
 func get_drivetrain_diagnostics() -> Dictionary:
 	return drivetrain_controller._get_diagnostics()
 
-func force_gear(gear: int):
-	"""Force specific gear (for debugging)"""
+## Force specific gear (for debugging)
+func force_gear(gear: int) -> void:
 	drivetrain_controller.force_gear(gear)
 
-func stall_engine():
-	"""Force engine stall"""
+## Force engine stall
+func stall_engine() -> void:
 	drivetrain_controller.stall_engine()
 
-func reset_drivetrain():
-	"""Reset drivetrain to initial state"""
+## Reset drivetrain to initial state
+func reset_drivetrain() -> void:
 	drivetrain_controller.reset_clutch_condition()
 	drivetrain_controller.force_gear(1) # Neutral
 #endregion
