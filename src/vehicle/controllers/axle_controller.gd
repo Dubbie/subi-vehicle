@@ -61,8 +61,8 @@ enum DifferentialType {
 ## A lower value makes the LSD react faster and more aggressively. Good values: 5.0 to 20.0
 @export var lsd_engagement_speed: float = 10.0
 ## For a Locked Differential, this determines how rigidly it forces the wheels
-## to the same speed. This needs to be a very high value to overcome engine torque.
-@export var locking_stiffness: float = 5000.0
+## to the same speed. This needs to be somewhat low so we don't break the physics.
+@export var locking_stiffness: float = 150.0
 
 @export_group("Wheels")
 ## Visually positioning the wheels. Not used at the moment.

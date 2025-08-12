@@ -26,6 +26,8 @@ peak_longitudinal_friction = 1.0
 peak_lateral_friction = 0.95
 sliding_longitudinal_friction = 0.75
 sliding_lateral_friction = 0.65
+nominal_load = 3000.0
+load_sensitivity_exponent = 0.1
 peak_slip_ratio = 0.15
 peak_slip_angle_deg = 8.0
 longitudinal_stiffness_factor = 16.0
@@ -45,6 +47,8 @@ peak_longitudinal_friction = 1.1
 peak_lateral_friction = 0.9
 sliding_longitudinal_friction = 0.7
 sliding_lateral_friction = 0.6
+nominal_load = 3000.0
+load_sensitivity_exponent = 0.1
 peak_slip_ratio = 0.18
 peak_slip_angle_deg = 12.0
 longitudinal_stiffness_factor = 15.0
@@ -66,7 +70,6 @@ pedal_controller = NodePath("Components/PedalController")
 steering_controller = NodePath("Components/SteeringController")
 drivetrain_controller = NodePath("Components/DrivetrainController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
-physics_sub_steps = 1
 
 [node name="Components" type="Node" parent="."]
 
@@ -155,8 +158,7 @@ spring_damping = 2500.0
 anti_roll_stiffness = 10000.0
 caster_angle_deg = 0.0
 toe_angle_deg = 0.08
-differential_type = 1
-locking_stiffness = 150.0
+differential_type = 2
 wheel_width = 0.205
 tire_model = SubResource("Resource_dc6sd")
 left_wheel = NodePath("WheelRL")
