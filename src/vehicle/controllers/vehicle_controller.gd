@@ -301,6 +301,18 @@ func _update_debug_display():
 	if drivetrain_controller.auto_clutch_enabled:
 		text_parts.append("[AUTO-CLUTCH]")
 
+	# Steering
+	text_parts.append("\n--- Steering ---")
+	var steer_info = steering_controller.get_debug_info()
+	text_parts.append("Slip Angle: %.1f°" % steer_info.front_slip_angle)
+	text_parts.append("Grip Util: %.2f%%" % (steer_info.grip_utilization * 100.0))
+	text_parts.append("Steer Limit: %.2f" % steer_info.steering_limit)
+
+	if steer_info.is_counter_steering:
+		text_parts.append("[COUNTER-STEERING]")
+	if steer_info.grip_limiting_active:
+		text_parts.append("[GRIP LIMITING]")
+
 	engine_label.text = "\n".join(text_parts)
 #endregion
 

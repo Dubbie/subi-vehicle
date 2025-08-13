@@ -149,69 +149,48 @@ func _update_grip_analysis():
 		grip_utilization = 0.0
 		return
 
-	# Get slip angles from wheels that have contact
-	var total_slip = 0.0
+	# --- FIX: Average the SIGNED slip angles first to preserve direction ---
+	var total_slip_rad = 0.0
 	var wheel_count = 0
 
 	if front_axle.left_wheel.has_contact:
-		total_slip += abs(rad_to_deg(front_axle.left_wheel.lat_slip))
+		total_slip_rad += front_axle.left_wheel.lat_slip
 		wheel_count += 1
 
 	if front_axle.right_wheel.has_contact:
-		total_slip += abs(rad_to_deg(front_axle.right_wheel.lat_slip))
+		total_slip_rad += front_axle.right_wheel.lat_slip
 		wheel_count += 1
 
-	# Average slip angle from wheels in contact
+	# Calculate the average signed slip angle
+	var average_slip_rad = 0.0
 	if wheel_count > 0:
-		current_front_slip_angle = total_slip / wheel_count
-	else:
-		current_front_slip_angle = 0.0
+		average_slip_rad = total_slip_rad / wheel_count
 
-	# Smooth the slip angle for stability
+	# Store the smoothed, signed slip angle in degrees for use in detection logic
+	current_front_slip_angle = rad_to_deg(average_slip_rad)
 	smoothed_front_slip_angle = lerp(smoothed_front_slip_angle, current_front_slip_angle, grip_smoothing)
 
-	# Calculate grip utilization with a progressive curve
-	grip_utilization = smoothed_front_slip_angle / max_slip_angle_deg
+	# --- Now, calculate grip utilization using the MAGNITUDE (abs) of the slip ---
+	grip_utilization = abs(smoothed_front_slip_angle) / max_slip_angle_deg
 	# Apply a curve to make the transition more gradual
 	grip_utilization = grip_utilization * grip_utilization
 
 func _detect_counter_steering(current_input: float) -> bool:
 	# Need minimum slip angle and input to detect counter-steering
-	if smoothed_front_slip_angle < 2.0 or abs(current_input) < counter_steer_sensitivity:
+	# Use the magnitude of the slip angle for the threshold check
+	if abs(smoothed_front_slip_angle) < 2.0 or abs(current_input) < counter_steer_sensitivity:
 		return false
 
-	# Get average slip from front axle
-	var front_axle = vehicle_controller.axles[0]
-	var avg_slip = 0.0
-	var wheel_count = 0
-
-	if front_axle.left_wheel.has_contact:
-		avg_slip += front_axle.left_wheel.lat_slip
-		wheel_count += 1
-
-	if front_axle.right_wheel.has_contact:
-		avg_slip += front_axle.right_wheel.lat_slip
-		wheel_count += 1
-
-	if wheel_count == 0:
-		return false
-
-	avg_slip /= wheel_count
-
-	# Determine slip and input directions
-	var slip_direction = sign(avg_slip)
+	# --- FIX: Use the smoothed, signed slip angle calculated in the analysis step ---
+	# A positive slip angle means the front is sliding right.
+	# A positive input means steering right.
+	var slip_direction = sign(smoothed_front_slip_angle)
 	var input_direction = sign(current_input)
 
-	# Additional check: counter-steering is more likely when slip angle is increasing
-	var slip_increasing = slip_angle_trend > 0.1
+	# --- FIX: Counter-steering is when you steer IN THE SAME DIRECTION as the slide ---
+	var is_correcting = (slip_direction != 0 and slip_direction == input_direction)
 
-	# Counter-steering occurs when:
-	# 1. Input direction opposes slip direction
-	# 2. We have sufficient input magnitude
-	# 3. Optionally: slip angle is increasing (more aggressive detection)
-	var is_opposing = slip_direction != 0 and slip_direction != input_direction
-
-	return is_opposing and (slip_increasing or smoothed_front_slip_angle > 4.0)
+	return is_correcting
 
 func _calculate_grip_limit() -> float:
 	# More progressive grip limiting

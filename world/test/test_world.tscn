@@ -1,8 +1,8 @@
 [gd_scene load_steps=10 format=3 uid="uid://x2o3bpr8uv1v"]
 
-[ext_resource type="PackedScene" uid="uid://bmrx0ppni2eb5" path="res://vehicles/_base/base_vehicle.tscn" id="1_6mb5t"]
 [ext_resource type="Texture2D" uid="uid://cwnafln8tutny" path="res://world/test/texture_02.png" id="1_hguy6"]
 [ext_resource type="PackedScene" uid="uid://caaf88j57r5p7" path="res://src/vehicle/chase_camera/chase_camera.tscn" id="3_wu8pm"]
+[ext_resource type="PackedScene" uid="uid://dfu01vvlnmi5v" path="res://vehicles/punto_2/car_punto_2.tscn" id="3_x06f6"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_wh4hx"]
 size = Vector3(1000, 1, 1000)
@@ -43,11 +43,11 @@ environment = SubResource("Environment_wu8pm")
 transform = Transform3D(0.612372, -0.158494, -0.774519, 0.612372, -0.524519, 0.591506, -0.5, -0.836516, -0.224144, 0, 0, 0)
 shadow_enabled = true
 
-[node name="BaseVehicle" parent="." instance=ExtResource("1_6mb5t")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.13577, 0)
-
 [node name="ChaseCamera" parent="." node_paths=PackedStringArray("target") instance=ExtResource("3_wu8pm")]
 target = NodePath("../BaseVehicle")
 rotation_speed = 24.0
 distance = 7.0
 height = 2.5
+
+[node name="BaseVehicle" parent="." instance=ExtResource("3_x06f6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.724192, 0)

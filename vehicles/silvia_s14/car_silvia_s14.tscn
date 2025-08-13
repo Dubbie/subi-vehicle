@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://cffn0vastslc2"]
+
+[ext_resource type="PackedScene" uid="uid://bmrx0ppni2eb5" path="res://vehicles/_base/base_vehicle.tscn" id="1_rk7h8"]
+[ext_resource type="PackedScene" uid="uid://tdom7gokww60" path="res://vehicles/silvia_s14/assets/silvia_s14.blend" id="2_2t8eb"]
+
+[node name="BaseVehicle" instance=ExtResource("1_rk7h8")]
+
+[node name="silvia_s14" parent="." index="3" instance=ExtResource("2_2t8eb")]
+transform = Transform3D(-1.48, 0, -2.23474e-07, 0, 1.48, 0, 2.23474e-07, 0, -1.48, 0, -0.312184, -2.24507)
+
+[editable path="Axles/FrontAxle/WheelFL"]
+[editable path="Axles/FrontAxle/WheelFR"]
+[editable path="Axles/RearAxle/WheelRL"]
+[editable path="Axles/RearAxle/WheelRR"]
