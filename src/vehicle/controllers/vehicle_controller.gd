@@ -1,14 +1,12 @@
 class_name VehicleController
 extends RigidBody3D
 
-## Simplified vehicle controller that delegates drivetrain management to DrivetrainController
-## This creates a cleaner separation of concerns
-
 #region Export Variables
 @export_group("Components")
 @export var pedal_controller: PedalController
 @export var steering_controller: SteeringController
 @export var drivetrain_controller: DrivetrainController
+@export var aero_controller: AeroController
 
 @export_group("Vehicle Configuration")
 @export var weight: float = 1250.0
@@ -61,6 +59,7 @@ func _ready():
 	_initialize_drivetrain()
 
 	steering_controller.initialize(self)
+	aero_controller.initialize(self)
 
 	# Connect drivetrain signals
 	drivetrain_controller.gear_changed.connect(_on_gear_changed)

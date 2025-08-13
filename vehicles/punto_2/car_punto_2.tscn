@@ -77,6 +77,12 @@ fade_start_temperature = 220.0
 fade_complete_temperature = 350.0
 auto_clutch_enabled = true
 
+[node name="AeroController" parent="Components" index="3"]
+frontal_area = 2.08
+drag_coefficient = 0.33
+lift_coefficient = 0.1
+yaw_stability_factor = 0.02
+
 [node name="FrontAxle" parent="Axles" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.23)
 z_offset = -1.23
@@ -142,6 +148,9 @@ shape = SubResource("ConvexPolygonShape3D_5ekr3")
 
 [node name="punto_2" parent="." index="3" instance=ExtResource("2_l45y5")]
 transform = Transform3D(-1.66, 0, 2.50653e-07, 0, 1.66, 0, -2.50653e-07, 0, -1.66, 0, -0.352165, -2.03916)
+
+[node name="AeroCenterPoint" parent="." index="4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.463, -0.3)
 
 [editable path="Axles/FrontAxle/WheelFL"]
 [editable path="Axles/FrontAxle/WheelFR"]

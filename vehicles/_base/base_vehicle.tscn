@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=12 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://b3qnjs8phepis" path="res://src/vehicle/controllers/steering_controller.gd" id="3_g7wwp"]
 [ext_resource type="Script" uid="uid://boq1uobqxqnxm" path="res://src/vehicle/controllers/axle_controller.gd" id="3_o7ea4"]
 [ext_resource type="Script" uid="uid://c1yiva241nq0e" path="res://src/vehicle/controllers/drivetrain_controller.gd" id="4_8g4xo"]
+[ext_resource type="Script" uid="uid://cadt2jrvc23hj" path="res://src/vehicle/controllers/aero_controller.gd" id="5_8g4xo"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="7_8g4xo"]
 
 [sub_resource type="Curve" id="Curve_dc6sd"]
@@ -55,13 +56,14 @@ transient_response = 0.8
 ellipse_factor = 1.2
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "axles")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "aero_controller", "axles")]
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, 0.16, -0.18)
 script = ExtResource("1_v55up")
 pedal_controller = NodePath("Components/PedalController")
 steering_controller = NodePath("Components/SteeringController")
 drivetrain_controller = NodePath("Components/DrivetrainController")
+aero_controller = NodePath("Components/AeroController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
 
 [node name="Components" type="Node" parent="."]
@@ -80,6 +82,11 @@ torque_curve = SubResource("Curve_dc6sd")
 gear_ratios = Array[float]([-3.382, 0.0, 3.321, 1.902, 1.308, 1.0, 0.759])
 upshift_rpm = 6000.0
 metadata/_custom_type_script = "uid://c1yiva241nq0e"
+
+[node name="AeroController" type="Node" parent="Components" node_paths=PackedStringArray("aero_center_point")]
+script = ExtResource("5_8g4xo")
+aero_center_point = NodePath("../../AeroCenterPoint")
+metadata/_custom_type_script = "uid://cadt2jrvc23hj"
 
 [node name="Axles" type="Node3D" parent="."]
 
@@ -165,6 +172,9 @@ transform = Transform3D(-4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 
 radius = 0.316
 height = 0.205
 sides = 16
+
+[node name="AeroCenterPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.186379, -0.389925)
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
