@@ -546,6 +546,8 @@ func _calculate_clutch_torque(throttle_input: float, delta: float) -> float:
 	var slip_velocity = engine_angular_velocity - gearbox_angular_velocity
 	var slip_rpm = abs(slip_velocity * RADS_TO_RPM)
 
+	clutch_slip_rpm = slip_rpm
+
 	# Get available engine torque
 	var engine_torque_available = 0.0
 	if torque_curve:

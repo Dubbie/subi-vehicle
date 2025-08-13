@@ -71,6 +71,9 @@ func _process(_delta: float):
 	if debug_mode:
 		_update_debug_display()
 
+		var com_world: Vector3 = to_global(center_of_mass)
+		DebugDraw3D.draw_sphere(com_world, 0.1, Color.WHITE)
+
 func _physics_process(delta: float):
 	if not _validate_components():
 		return

@@ -59,9 +59,9 @@ var lon_force_vector: Vector3 = Vector3.ZERO
 var lat_force_vector: Vector3 = Vector3.ZERO
 #endregion
 
-# --- Node References ---
+# Node references
 @onready var car: VehicleController = get_owner()
-# Get references to the nodes in the visual hierarchy
+# Visual hierarchy nodes
 @onready var animation_node: Marker3D = $Animation
 @onready var camber_node: Marker3D = $Animation/Camber
 @onready var wheel_node: Marker3D = $Animation/Camber/Wheel
@@ -81,35 +81,28 @@ func _ready() -> void:
 	add_exception(car)
 
 func _process(_delta: float) -> void:
-	# This function now handles updating the visual representation of the wheel
-	# using the node hierarchy (Animation -> Camber -> Wheel).
-	# 1. Suspension Travel
-	# The 'Animation' node moves up and down along the Y-axis.
+	# Update wheel visuals using the node hierarchy (Animation -> Camber -> Wheel)
+	# Suspension travel - animation node moves up/down
 	animation_node.position.y = - current_spring_length
 
-	# 2. Caster and Steering
-	# The caster angle tilts the local UP axis to create the final steering axis.
-	# The 'Animation' node rotates around this tilted axis. This correctly
-	# simulates the visual effect of caster causing camber change during steering.
+	# Caster and steering - caster tilts the steering axis
+	# This creates realistic camber change when steering
 	var caster_rad = deg_to_rad(caster_angle_deg)
 	var steer_rad = deg_to_rad(current_steer_angle)
 	var steering_axis = Vector3.UP.rotated(Vector3.RIGHT, caster_rad)
 	animation_node.basis = Basis().rotated(steering_axis, steer_rad)
 
-	# 3. Camber
-	# The 'Camber' node applies a static rotation around its local FORWARD axis.
-	# Since it's a child of the steering node, this is applied correctly after steering.
+	# Camber - static rotation around forward axis after steering
 	var camber_rad = deg_to_rad(camber_angle_deg)
 	camber_node.basis = Basis().rotated(Vector3.FORWARD, camber_rad)
 
-	# 4. Toe and Wheel Spin
-	# The final 'Wheel' node applies toe (static yaw) and then the wheel spin (dynamic roll).
+	# Toe and wheel spin - final node applies toe (static) then spin (dynamic)
 	var toe_rad = deg_to_rad(toe_angle_deg)
 	var toe_rotation = Basis().rotated(Vector3.UP, toe_rad)
 	var spin_rotation = Basis().rotated(Vector3.RIGHT, -delta_rotation)
 	wheel_node.basis = toe_rotation * spin_rotation
 
-	# --- Debug Drawing ---
+	# Debug visualization
 	if not debug_mode or not has_contact: return
 
 	var force_scale: float = car.mass
@@ -120,8 +113,8 @@ func _process(_delta: float) -> void:
 	if has_contact:
 		var text_position = global_position + Vector3.UP * 3.0
 		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [smoothed_lon_slip, lat_slip]
-		var load_text = "Load: %.d N" % [local_force.y]
-		DebugDraw3D.draw_text(text_position, slip_text + load_text)
+		var load_text = "Load: %.d N\n" % [local_force.y]
+		DebugDraw3D.draw_text(text_position, slip_text + load_text, 32)
 
 #region Public methods
 func update_state(p_steer_angle: float, delta: float) -> void:
@@ -130,7 +123,7 @@ func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_contact_velocities()
 
 func _update_spring_and_contact(delta: float) -> void:
-	# Clear the anti-roll force from the previous frame
+	# Reset anti-roll from last frame
 	anti_roll_force = 0.0
 
 	force_raycast_update()
@@ -142,77 +135,66 @@ func _update_spring_and_contact(delta: float) -> void:
 		var ray_length = global_position.distance_to(get_collision_point())
 		current_spring_length = ray_length - wheel_radius
 
-		# Clamp spring length to valid range
+		# Keep spring length within bounds
 		current_spring_length = clamp(current_spring_length, 0.0, suspension_max_length)
 	else:
-		# When not in contact, spring extends to maximum length
+		# No contact - spring extends to max
 		contact_point = Vector3.ZERO
 		contact_normal = Vector3.UP
 		current_spring_length = suspension_max_length
 
-	# --- Spring Force Calculation (Always based on compression from rest length) ---
+	# Spring force - based on compression from rest length
 	var compression_distance = suspension_max_length - current_spring_length
 	var spring_force = suspension_stiffness * compression_distance
 
-	# --- Damper Force Calculation ---
-	# Calculate spring velocity (positive = extending, negative = compressing)
+	# Damper force calculation
+	# Spring velocity: positive = extending, negative = compressing
 	var spring_velocity = (current_spring_length - last_spring_length) / delta
 
-	# Separate bump (compression) and rebound (extension) damping
+	# Different damping for bump vs rebound
 	var damper_force: float
 	if spring_velocity < 0.0: # Compressing (bump)
 		damper_force = suspension_bump_damping * abs(spring_velocity)
 	else: # Extending (rebound)
 		damper_force = - suspension_rebound_damping * spring_velocity
 
-	# --- Total Suspension Force ---
-	# Spring force always pushes up when compressed
-	# Damper force opposes motion
-	# Anti-roll force can push up or down depending on body roll
+	# Total suspension force
+	# Spring pushes up when compressed, damper opposes motion, anti-roll can go either way
 	var total_suspension_force = spring_force + damper_force + anti_roll_force
 
-	# Apply force limits based on contact
+	# Handle force limits based on contact
 	if has_contact:
-		# When in contact, force can't be negative (can't pull through ground)
+		# Can't pull through ground
 		total_suspension_force = max(0.0, total_suspension_force)
 
-		# Store the force magnitude and create world space vector
 		local_force.y = total_suspension_force
 		load_force_vector = total_suspension_force * contact_normal
 	else:
-		# When not in contact, allow negative force (spring tries to pull wheel down)
-		# But limit how much it can pull to prevent unrealistic behavior
+		# Allow some downward pull but limit it to prevent weird behavior
 		var max_pull_force = suspension_stiffness * 0.1 # 10% of max spring force
 		total_suspension_force = max(-max_pull_force, total_suspension_force)
 
-		# Store the force magnitude (negative means pulling down)
 		local_force.y = total_suspension_force
-		# Apply force along the wheel's up direction (not contact normal since no contact)
+		# Use wheel's up direction since no contact normal
 		load_force_vector = total_suspension_force * global_transform.basis.y
 
 	last_spring_length = current_spring_length
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
+	# Store drive torque from axle (can be positive or negative)
 	drive_torque = current_drive_torque
-	current_angular_velocity += drive_torque * inertia_inverse * delta
-	var crr = 0.015
-	var rolling_resistance_force = crr * local_force.y
-	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
-	rolling_resistance_torque *= -sign(current_angular_velocity)
-	var total_resist_torque = current_brake_torque + rolling_resistance_torque
-	var w_brake = total_resist_torque * inertia_inverse * delta
-	if w_brake > abs(current_angular_velocity):
-		current_angular_velocity = 0.0
-	else:
-		current_angular_velocity -= sign(current_angular_velocity) * w_brake
 
+	# Calculate tire forces based on last frame's velocity
+	# Need to do this before applying new torques
 	var tire_forces = Vector2.ZERO
 	if has_contact:
+		# Calculate slip using angular velocity from end of last physics step
 		var surface_speed = current_angular_velocity * wheel_radius
 		lon_slip = (surface_speed - contact_lon_velocity) / max(abs(contact_lon_velocity), 0.1)
-		smoothed_lon_slip = lerp(smoothed_lon_slip, lon_slip, 0.1)
-		lat_slip = atan2(-contact_lat_velocity, abs(contact_lon_velocity))
+		smoothed_lon_slip = lerp(smoothed_lon_slip, lon_slip, 0.1) # Smooth for stability
+		lat_slip = atan2(-contact_lat_velocity, abs(contact_lon_velocity) + 0.001)
 
+		# Get forces from tire model
 		var model_params = TireParams.new()
 		model_params.vertical_load = local_force.y
 		model_params.lon_slip_ratio = lon_slip
@@ -224,15 +206,38 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 		model_params.delta = delta
 		tire_forces = tire_model.calculate_forces(model_params)
 
-	local_force.x = tire_forces.x
-	local_force.z = tire_forces.y
-	var t_traction = local_force.z * wheel_radius
-	var w_traction = t_traction * inertia_inverse * delta
-	current_angular_velocity -= w_traction
+	# Store forces for later application to car body
+	local_force.x = tire_forces.x # Lateral Force (Fx)
+	local_force.z = tire_forces.y # Longitudinal Force (Fz)
+
+	# Sum all torques acting on the wheel
+	# Traction torque from ground resistance
+	var traction_torque = local_force.z * wheel_radius
+
+	# Rolling resistance always opposes rotation
+	var crr = 0.015
+	var rolling_resistance_force = crr * local_force.y
+	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
+
+	# Net torque calculation
+	# Drive torque from engine, minus traction from ground, minus brakes and rolling resistance
+	var net_torque = drive_torque - traction_torque - (current_brake_torque * sign(current_angular_velocity)) - (rolling_resistance_torque * sign(current_angular_velocity))
+
+	# Apply net torque to update angular velocity
+	var angular_acceleration = net_torque * inertia_inverse
+	current_angular_velocity += angular_acceleration * delta
+
+	# Prevent infinite spinning in air with simple damping
+	if not has_contact:
+		current_angular_velocity *= 0.998
+
+	# Update wheel visuals
 	delta_rotation += current_angular_velocity * delta
 	delta_rotation = fposmod(delta_rotation, 2 * PI)
-	lon_force_vector = contact_forward * local_force.z
-	lat_force_vector = contact_right * local_force.x
+
+	# Update world-space force vectors for debug drawing
+	lon_force_vector = - knuckle_forward * local_force.z
+	lat_force_vector = knuckle_right * local_force.x
 
 func apply_forces_to_rigidbody():
 	if not has_contact:

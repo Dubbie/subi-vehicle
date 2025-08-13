@@ -217,7 +217,7 @@ func get_distributed_torques(total_axle_torque: float) -> Vector2:
 			var speed_difference = wheel_speed_left_rads - wheel_speed_right_rads
 
 			# 1. Determine the maximum possible locking torque based on input power.
-			var max_locking_torque = total_axle_torque * lsd_power_lock_factor
+			var max_locking_torque = abs(total_axle_torque) * lsd_power_lock_factor
 
 			# 2. Determine how much of that lock to apply based on the slip speed.
 			# This creates a smooth engagement instead of an instant, jerky lock.
