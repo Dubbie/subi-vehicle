@@ -155,7 +155,7 @@ on_throttle_sound = ExtResource("27_v7cpw")
 off_throttle_sound = ExtResource("26_ijkt7")
 metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
 
-[node name="BaseVehicle" instance=ExtResource("1_r8fpc")]
+[node name="CarPunto2" instance=ExtResource("1_r8fpc")]
 center_of_mass = Vector3(0, 0.16, -0.28)
 weight = 935.0
 

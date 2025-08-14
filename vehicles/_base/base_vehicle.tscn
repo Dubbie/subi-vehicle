@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=47 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
@@ -7,7 +7,108 @@
 [ext_resource type="Script" uid="uid://boq1uobqxqnxm" path="res://src/vehicle/controllers/axle_controller.gd" id="3_o7ea4"]
 [ext_resource type="Script" uid="uid://c1yiva241nq0e" path="res://src/vehicle/controllers/drivetrain_controller.gd" id="4_8g4xo"]
 [ext_resource type="Script" uid="uid://cadt2jrvc23hj" path="res://src/vehicle/controllers/aero_controller.gd" id="5_8g4xo"]
+[ext_resource type="PackedScene" uid="uid://8b5gt1634mo6" path="res://vehicles/_base/base_engine_controller.tscn" id="6_3pvif"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="7_8g4xo"]
+[ext_resource type="Script" uid="uid://dkfcuqg8x6c6o" path="res://src/vehicle/engine_sound/engine_sound_loop.gd" id="7_lkyyl"]
+[ext_resource type="AudioStream" uid="uid://4207w1qqa0up" path="res://vehicles/punto_2/assets/engine_sounds/punto_1000_off.wav" id="8_pyfqn"]
+[ext_resource type="AudioStream" uid="uid://x771pfednsbg" path="res://vehicles/punto_2/assets/engine_sounds/punto_1000_on.wav" id="9_ggp7d"]
+[ext_resource type="AudioStream" uid="uid://m2tkesg5n3ep" path="res://vehicles/punto_2/assets/engine_sounds/punto_1500_off.wav" id="10_nsp0t"]
+[ext_resource type="AudioStream" uid="uid://lysxddm2swey" path="res://vehicles/punto_2/assets/engine_sounds/punto_1500_on.wav" id="11_dxke0"]
+[ext_resource type="AudioStream" uid="uid://ccw3ii5cstbxx" path="res://vehicles/punto_2/assets/engine_sounds/punto_2000_off.wav" id="12_t1r36"]
+[ext_resource type="AudioStream" uid="uid://ri4e3dilr5p" path="res://vehicles/punto_2/assets/engine_sounds/punto_2000_on.wav" id="13_lr4gn"]
+[ext_resource type="AudioStream" uid="uid://buwe6dte6ovr7" path="res://vehicles/punto_2/assets/engine_sounds/punto_2500_off.wav" id="14_xok5j"]
+[ext_resource type="AudioStream" uid="uid://dv6qd6di1cwcg" path="res://vehicles/punto_2/assets/engine_sounds/punto_2500_on.wav" id="15_k5mts"]
+[ext_resource type="AudioStream" uid="uid://t2mc8klv1slb" path="res://vehicles/punto_2/assets/engine_sounds/punto_3000_off.wav" id="16_viidu"]
+[ext_resource type="AudioStream" uid="uid://c0deyqyw3syp3" path="res://vehicles/punto_2/assets/engine_sounds/punto_3000_on.wav" id="17_emf3j"]
+[ext_resource type="AudioStream" uid="uid://betxfjeefv7b2" path="res://vehicles/punto_2/assets/engine_sounds/punto_3500_off.wav" id="18_5d00n"]
+[ext_resource type="AudioStream" uid="uid://cdew8x7i2vetg" path="res://vehicles/punto_2/assets/engine_sounds/punto_3500_on.wav" id="19_dh504"]
+[ext_resource type="AudioStream" uid="uid://cbbon6myrgf0a" path="res://vehicles/punto_2/assets/engine_sounds/punto_4000_off.wav" id="20_kx6ww"]
+[ext_resource type="AudioStream" uid="uid://dvr7hf2gq2cdg" path="res://vehicles/punto_2/assets/engine_sounds/punto_4000_on.wav" id="21_mawep"]
+[ext_resource type="AudioStream" uid="uid://68f4qic6bifw" path="res://vehicles/punto_2/assets/engine_sounds/punto_4500_off.wav" id="22_r3kac"]
+[ext_resource type="AudioStream" uid="uid://c8r0agixknobn" path="res://vehicles/punto_2/assets/engine_sounds/punto_4500_on.wav" id="23_aibku"]
+[ext_resource type="AudioStream" uid="uid://bpgre4dhooxeu" path="res://vehicles/punto_2/assets/engine_sounds/punto_5000_off.wav" id="24_ir1n5"]
+[ext_resource type="AudioStream" uid="uid://drcy4ri227tye" path="res://vehicles/punto_2/assets/engine_sounds/punto_5000_on.wav" id="25_feekq"]
+[ext_resource type="AudioStream" uid="uid://cl6o27qjky2w4" path="res://vehicles/punto_2/assets/engine_sounds/punto_5500_off.wav" id="26_gfr01"]
+[ext_resource type="AudioStream" uid="uid://wt6plh1xn74e" path="res://vehicles/punto_2/assets/engine_sounds/punto_5500_on.wav" id="27_uror7"]
+[ext_resource type="AudioStream" uid="uid://cq4trx6eknhyr" path="res://vehicles/punto_2/assets/engine_sounds/punto_6000_off.wav" id="28_8a8yq"]
+[ext_resource type="AudioStream" uid="uid://mc4x2lfmiyn3" path="res://vehicles/punto_2/assets/engine_sounds/punto_6000_on.wav" id="29_dspcw"]
+
+[sub_resource type="Resource" id="Resource_gxs67"]
+script = ExtResource("7_lkyyl")
+rpm = 1000
+on_throttle_sound = ExtResource("9_ggp7d")
+off_throttle_sound = ExtResource("8_pyfqn")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_6qit3"]
+script = ExtResource("7_lkyyl")
+rpm = 1500
+on_throttle_sound = ExtResource("11_dxke0")
+off_throttle_sound = ExtResource("10_nsp0t")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_m43yl"]
+script = ExtResource("7_lkyyl")
+rpm = 2000
+on_throttle_sound = ExtResource("13_lr4gn")
+off_throttle_sound = ExtResource("12_t1r36")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_2ntk4"]
+script = ExtResource("7_lkyyl")
+rpm = 2500
+on_throttle_sound = ExtResource("15_k5mts")
+off_throttle_sound = ExtResource("14_xok5j")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_hgriw"]
+script = ExtResource("7_lkyyl")
+rpm = 3000
+on_throttle_sound = ExtResource("17_emf3j")
+off_throttle_sound = ExtResource("16_viidu")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_i0qlg"]
+script = ExtResource("7_lkyyl")
+rpm = 3500
+on_throttle_sound = ExtResource("19_dh504")
+off_throttle_sound = ExtResource("18_5d00n")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_gyogu"]
+script = ExtResource("7_lkyyl")
+rpm = 4000
+on_throttle_sound = ExtResource("21_mawep")
+off_throttle_sound = ExtResource("20_kx6ww")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_p3yyx"]
+script = ExtResource("7_lkyyl")
+rpm = 4500
+on_throttle_sound = ExtResource("23_aibku")
+off_throttle_sound = ExtResource("22_r3kac")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_6qbqi"]
+script = ExtResource("7_lkyyl")
+rpm = 5000
+on_throttle_sound = ExtResource("25_feekq")
+off_throttle_sound = ExtResource("24_ir1n5")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_wng8y"]
+script = ExtResource("7_lkyyl")
+rpm = 5500
+on_throttle_sound = ExtResource("27_uror7")
+off_throttle_sound = ExtResource("26_gfr01")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_60axq"]
+script = ExtResource("7_lkyyl")
+rpm = 6000
+on_throttle_sound = ExtResource("29_dspcw")
+off_throttle_sound = ExtResource("28_8a8yq")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
 
 [sub_resource type="Curve" id="Curve_dc6sd"]
 _limits = [0.0, 275.0, 0.0, 7500.0]
@@ -65,6 +166,10 @@ steering_controller = NodePath("Components/SteeringController")
 drivetrain_controller = NodePath("Components/DrivetrainController")
 aero_controller = NodePath("Components/AeroController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
+
+[node name="BaseEngineController" parent="." node_paths=PackedStringArray("vehicle_controller") instance=ExtResource("6_3pvif")]
+vehicle_controller = NodePath("..")
+sound_loops = Array[ExtResource("7_lkyyl")]([SubResource("Resource_gxs67"), SubResource("Resource_6qit3"), SubResource("Resource_m43yl"), SubResource("Resource_2ntk4"), SubResource("Resource_hgriw"), SubResource("Resource_i0qlg"), SubResource("Resource_gyogu"), SubResource("Resource_p3yyx"), SubResource("Resource_6qbqi"), SubResource("Resource_wng8y"), SubResource("Resource_60axq")])
 
 [node name="Components" type="Node" parent="."]
 
