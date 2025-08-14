@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://8b5gt1634mo6"]
+
+[ext_resource type="Script" uid="uid://70i1o1si8gdf" path="res://src/vehicle/controllers/engine_audio_controller.gd" id="1_jb4e0"]
+
+[node name="BaseEngineController" type="Node3D"]
+script = ExtResource("1_jb4e0")
+
+[node name="OnPlayerA" type="AudioStreamPlayer3D" parent="."]
+
+[node name="OnPlayerB" type="AudioStreamPlayer3D" parent="."]
+
+[node name="OffPlayerA" type="AudioStreamPlayer3D" parent="."]
+
+[node name="OffPlayerB" type="AudioStreamPlayer3D" parent="."]

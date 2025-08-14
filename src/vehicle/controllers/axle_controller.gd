@@ -241,31 +241,57 @@ func get_distributed_torques(total_axle_torque: float) -> Vector2:
 
 #region Private API
 func _update_solid_axle_geometry():
-	# This method enforces the rigid link between the wheels.
-	# It calculates the axle's tilt and repositions the wheel nodes.
-	# 1. Define the axle's orientation (Basis).
-	# We start with the AxleController's own orientation.
-	var axle_basis = self.global_transform.basis
+	# Instead of directly positioning wheels, we enforce the solid axle constraint
+	# by averaging the suspension forces and heights, then applying corrective forces
+	if not (left_wheel.has_contact or right_wheel.has_contact):
+		return
 
-	# 2. Calculate the tilt based on wheel contact.
-	# Using the contact points from the last physics frame gives us a stable result.
-	if left_wheel.has_contact and right_wheel.has_contact:
-		var left_contact = left_wheel.get_collision_point()
-		var right_contact = right_wheel.get_collision_point()
+	# Calculate the average suspension compression to determine beam height
+	var left_compression = left_wheel.suspension_max_length - left_wheel.current_spring_length
+	var right_compression = right_wheel.suspension_max_length - right_wheel.current_spring_length
+	var avg_compression = (left_compression + right_compression) * 0.5
 
-		# Create a vector representing the tilted axle beam.
-		var axle_right_vector = (right_contact - left_contact).normalized()
-		# Create an up vector that is orthogonal to the axle and the car's forward direction.
-		var axle_up_vector = axle_right_vector.cross(axle_basis.z).normalized()
-		# Create the final forward vector.
-		var axle_forward_vector = axle_up_vector.cross(axle_right_vector).normalized()
+	# Calculate the beam tilt angle based on compression difference
+	var compression_diff = right_compression - left_compression
+	var beam_tilt_angle = atan2(compression_diff, track_width)
 
-		axle_basis = Basis(axle_right_vector, axle_up_vector, axle_forward_vector)
+	# Limit the tilt angle to prevent extreme angles
+	beam_tilt_angle = clamp(beam_tilt_angle, deg_to_rad(-15.0), deg_to_rad(15.0))
 
-	# 3. Position the wheels at the ends of the tilted axle beam.
-	var half_track = track_width / 2.0
-	left_wheel.global_position = self.global_position - axle_basis.x * half_track
-	right_wheel.global_position = self.global_position + axle_basis.x * half_track
+	# Calculate target spring lengths based on beam tilt
+	var half_track = track_width * 0.5
+	var left_target_compression = avg_compression - half_track * tan(beam_tilt_angle)
+	var right_target_compression = avg_compression + half_track * tan(beam_tilt_angle)
+
+	# Convert back to spring lengths
+	var left_target_length = left_wheel.suspension_max_length - left_target_compression
+	var right_target_length = right_wheel.suspension_max_length - right_target_compression
+
+	# Apply corrective forces to enforce the beam constraint
+	var beam_stiffness = spring_stiffness * 2.0 # Stiffer than individual springs
+
+	# For very stiff beams, you might want to add an export variable:
+	# @export var beam_stiffness_multiplier: float = 2.0
+	# var beam_stiffness = spring_stiffness * beam_stiffness_multiplier
+
+	# Calculate corrective forces
+	var left_correction = (left_target_length - left_wheel.current_spring_length) * beam_stiffness
+	var right_correction = (right_target_length - right_wheel.current_spring_length) * beam_stiffness
+
+	# Apply the corrections as additional forces
+	left_wheel.anti_roll_force += left_correction
+	right_wheel.anti_roll_force += right_correction
+
+	# Optional: Add some damping to prevent oscillations
+	var beam_damping = spring_bump_damping * 0.5
+	var left_velocity = (left_wheel.current_spring_length - left_wheel.last_spring_length) / get_physics_process_delta_time()
+	var right_velocity = (right_wheel.current_spring_length - right_wheel.last_spring_length) / get_physics_process_delta_time()
+
+	var velocity_diff = right_velocity - left_velocity
+	var damping_force = velocity_diff * beam_damping
+
+	left_wheel.anti_roll_force += damping_force * 0.5
+	right_wheel.anti_roll_force -= damping_force * 0.5
 
 func _update_independent_suspension_forces():
 	# This logic is for the anti-roll bar on independent suspensions. It remains the same.
