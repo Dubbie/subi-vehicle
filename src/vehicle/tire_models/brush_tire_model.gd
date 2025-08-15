@@ -1,212 +1,271 @@
-class_name EnhancedBrushTireModel
+class_name RealisticBrushTireModel
 extends BaseTireModel
 
-# Basic friction parameters
-@export var peak_longitudinal_friction: float = 1.1
-@export var peak_lateral_friction: float = 1.0
-@export var sliding_longitudinal_friction: float = 0.8
-@export var sliding_lateral_friction: float = 0.7
+# Core friction parameters
+## Peak longitudinal friction coefficient
+@export var peak_longitudinal_mu: float = 1.1
+## Peak lateral friction coefficient
+@export var peak_lateral_mu: float = 1.0
+## Sliding longitudinal friction
+@export var sliding_longitudinal_mu: float = 0.8
+## Sliding lateral friction
+@export var sliding_lateral_mu: float = 0.7
 
-# Load parameteres
-@export var nominal_load: float = 3500.0
-@export var load_sensitivity_exponent: float = 0.05
-
-# Peak slip characteristics
+# Slip characteristics - where the tire peaks and how sharp the curves are
 ## ~12% slip for peak longitudinal force
-@export var peak_slip_ratio: float = 0.12
+@export var peak_lon_slip_ratio: float = 0.12
 ## 6 degrees for peak lateral force
-@export var peak_slip_angle_deg: float = 6.0
+@export var peak_lat_slip_angle_deg: float = 6.0
+## How sharp the longitudinal curve is (1.0-3.0)
+@export var lon_curve_sharpness: float = 1.5
+## How sharp the lateral curve is (1.0-3.0)
+@export var lat_curve_sharpness: float = 2.0
 
-# Tire stiffness (force per unit deflection)
-@export var longitudinal_stiffness_factor: float = 18.0
-@export var lateral_stiffness_factor: float = 17.0
+# Load sensitivity - realistic tire behavior with load
+## Load where tire performs best (N)
+@export var optimal_load: float = 4000.0
+## How much friction changes with load (0.0-1.0)
+@export var load_sensitivity: float = 0.3
 
-# Shape factors for slip curves
-## Higher = sharper peak
-@export var longitudinal_shape_factor: float = 2.0
-## Higher = sharper peak
-@export var lateral_shape_factor: float = 2.5
+# Combined slip behavior
+## Shape of friction circle (1.0 = perfect circle)
+@export var friction_circle_shape: float = 1.1
 
-# Load sensitivity
-## How much load affects peak friction (0-1)
-@export var load_sensitivity: float = 0.8
-## Effect of camber angle
-@export var camber_stiffness: float = 0.1
+# Transient behavior - how quickly tire responds to slip changes
+## Distance for tire to respond to slip change (m)
+@export var relaxation_length: float = 0.15
+## Minimum speed for relaxation calculation (m/s)
+@export var min_relaxation_speed: float = 1.0
 
-# Relaxation and transient behavior
-@export var relaxation_length: float = 0.3
-## How quickly tire responds to slip changes
-@export var transient_response: float = 0.8
-
-# Combined slip parameters
-## Shape of friction ellipse (1.0 = circle)
-@export var ellipse_factor: float = 1.2
-
-# Bristle deflection state - stored per wheel instance
-var longitudinal_deflection: float = 0.0
-var lateral_deflection: float = 0.0
-var previous_lon_slip: float = 0.0
-var previous_lat_slip: float = 0.0
+# Internal state for transient behavior
+var target_lon_force: float = 0.0
+var target_lat_force: float = 0.0
+var current_lon_force: float = 0.0
+var current_lat_force: float = 0.0
 
 func calculate_forces(params: TireParams) -> Vector2:
-	# Unpack parameters
 	var vertical_load = params.vertical_load
-	var lat_slip_rad = params.lat_slip_angle_rad
+	var lat_slip_angle_rad = params.lat_slip_angle_rad
 	var lon_slip_ratio = params.lon_slip_ratio
 	var surface_friction = params.surface_friction
-	var v_lon = params.longitudinal_velocity
-	var delta = params.delta
+	var longitudinal_velocity = params.longitudinal_velocity
 	var wheel_angular_velocity = params.wheel_angular_velocity
 	var wheel_radius = params.wheel_radius
+	var delta = params.delta
 
-	# Early exit for invalid conditions
+	# Safety checks
 	if vertical_load <= 0.0 or delta <= 0.0:
-		_reset_deflections()
+		_reset_forces()
 		return Vector2.ZERO
 
-	# Calculate slip velocities
-	var wheel_rim_speed = wheel_angular_velocity * wheel_radius
-	var slip_velocity_lon = wheel_rim_speed - v_lon
-	var slip_velocity_lat = abs(v_lon) * tan(lat_slip_rad)
+	# Calculate load factor - realistic tire load sensitivity
+	var load_factor = _calculate_realistic_load_factor(vertical_load)
 
-	# Load-dependent characteristics
-	var load_factor = _calculate_load_factor(vertical_load)
-	var effective_peak_lon_friction = peak_longitudinal_friction * load_factor
-	var effective_peak_lat_friction = peak_lateral_friction * load_factor
+	# Calculate effective friction coefficients
+	var effective_peak_lon_mu = peak_longitudinal_mu * load_factor * surface_friction
+	var effective_peak_lat_mu = peak_lateral_mu * load_factor * surface_friction
+	var effective_sliding_lon_mu = sliding_longitudinal_mu * load_factor * surface_friction
+	var effective_sliding_lat_mu = sliding_lateral_mu * load_factor * surface_friction
 
-	# Calculate effective stiffness
-	var effective_lon_stiffness = vertical_load * longitudinal_stiffness_factor * load_factor
-	var effective_lat_stiffness = vertical_load * lateral_stiffness_factor * load_factor
+	# Calculate target forces using Pacejka-style curves
+	target_lon_force = _calculate_longitudinal_force(
+		lon_slip_ratio, vertical_load,
+		effective_peak_lon_mu, effective_sliding_lon_mu
+	)
 
-	# Update bristle deflection with relaxation and transient response
-	_update_deflections(slip_velocity_lon, slip_velocity_lat, wheel_rim_speed, v_lon, delta)
+	target_lat_force = _calculate_lateral_force(
+		lat_slip_angle_rad, vertical_load,
+		effective_peak_lat_mu, effective_sliding_lat_mu
+	)
 
-	# Calculate raw forces from bristle deflection
-	var raw_force_lon = longitudinal_deflection * effective_lon_stiffness
-	var raw_force_lat = lateral_deflection * effective_lat_stiffness
+	# Apply friction circle limit
+	var limited_forces = _apply_friction_circle(target_lon_force, target_lat_force, vertical_load * surface_friction)
+	target_lon_force = limited_forces.y
+	target_lat_force = limited_forces.x
 
-	# Calculate normalized slip values for curve lookup
-	var normalized_lon_slip = abs(lon_slip_ratio) / peak_slip_ratio if peak_slip_ratio > 0 else 0.0
-	var normalized_lat_slip = abs(lat_slip_rad) / deg_to_rad(peak_slip_angle_deg) if peak_slip_angle_deg > 0 else 0.0
+	# Apply relaxation (transient behavior)
+	_apply_relaxation(longitudinal_velocity, wheel_angular_velocity, wheel_radius, delta)
 
-	# Get force scaling factors from slip curves
-	var lon_force_factor = _longitudinal_slip_curve(normalized_lon_slip)
-	var lat_force_factor = _lateral_slip_curve(normalized_lat_slip)
+	# Return Vector2(lateral_force, longitudinal_force)
+	return Vector2(current_lat_force, current_lon_force)
 
-	# Apply peak friction limits and curve shapes
-	var max_lon_force = vertical_load * effective_peak_lon_friction * surface_friction
-	var max_lat_force = vertical_load * effective_peak_lat_friction * surface_friction
-
-	var force_lon = sign(raw_force_lon) * min(abs(raw_force_lon), max_lon_force * lon_force_factor)
-	var force_lat = sign(raw_force_lat) * min(abs(raw_force_lat), max_lat_force * lat_force_factor)
-
-	# Apply combined slip limitation (friction ellipse/circle)
-	var limited_forces = _apply_combined_slip_limit(force_lon, force_lat, max_lon_force, max_lat_force)
-	force_lon = limited_forces.y
-	force_lat = limited_forces.x
-
-	# Update deflections to match limited forces (important for next frame)
-	if effective_lon_stiffness > 0:
-		longitudinal_deflection = force_lon / effective_lon_stiffness
-	if effective_lat_stiffness > 0:
-		lateral_deflection = force_lat / effective_lat_stiffness
-
-	# Store slip values for next frame's transient response
-	previous_lon_slip = lon_slip_ratio
-	previous_lat_slip = lat_slip_rad
-
-	# Return forces: Vector2(lateral_force, longitudinal_force)
-	return Vector2(force_lat, force_lon)
-
-func _update_deflections(slip_vel_lon: float, slip_vel_lat: float, wheel_speed: float, vehicle_speed: float, delta: float) -> void:
-	var relaxation_factor = 0.0
-	if relaxation_length > 0:
-		# Use the speed at which the tire is moving through the contact patch
-		var contact_speed = max(wheel_speed, abs(vehicle_speed))
-		if contact_speed > 0.01:
-			relaxation_factor = contact_speed / relaxation_length
-
-	# Apply transient response (how quickly tire responds to changes)
-	var response_rate = transient_response * relaxation_factor
-
-	# Update deflections with both relaxation and transient effects
-	longitudinal_deflection += (slip_vel_lon - response_rate * longitudinal_deflection) * delta
-	lateral_deflection += (slip_vel_lat - response_rate * lateral_deflection) * delta
-
-func _calculate_load_factor(vertical_load: float) -> float:
-	# Real tire load sensitivity follows a power law relationship
-	# where mu = mu_0 * (Fz/Fz_nominal)^(-load_sensitivity_exponent)
-	if vertical_load <= 0.0 or nominal_load <= 0.0:
+## Realistic tire load sensitivity:
+## - Friction increases with load up to optimal point
+## - Then decreases due to tire saturation
+## - This matches real tire behavior
+func _calculate_realistic_load_factor(vertical_load: float) -> float:
+	return 1.0
+	if optimal_load <= 0.0:
 		return 1.0
 
-	# Power law relationship: coefficient decreases with increasing load
-	var load_ratio = vertical_load / nominal_load
-	var friction_multiplier = pow(load_ratio, -load_sensitivity_exponent)
+	var load_ratio = vertical_load / optimal_load
 
-	# Clamp to reasonable bounds to prevent extreme values
-	return clamp(friction_multiplier, 0.5, 1.5)
+	# Parabolic curve with peak at optimal load
+	# At optimal load: factor = 1.0
+	# Below optimal: slightly lower friction
+	# Above optimal: friction drops off more significantly
+	var base_factor: float
 
-func _longitudinal_slip_curve(normalized_slip: float) -> float:
-	# Modified Pacejka-like curve for longitudinal force
-	if normalized_slip <= 1.0:
-		# Build-up region: smooth curve to peak
-		return normalized_slip * (2.0 - normalized_slip)
+	if load_ratio <= 1.0:
+		# Below optimal load - slight increase up to optimal
+		base_factor = 0.85 + 0.15 * load_ratio
 	else:
-		# Sliding region: drop to sliding friction
-		var sliding_ratio = sliding_longitudinal_friction / peak_longitudinal_friction
-		var excess_slip = normalized_slip - 1.0
-		return sliding_ratio + (1.0 - sliding_ratio) * exp(-longitudinal_shape_factor * excess_slip)
+		# Above optimal load - diminishing returns then decrease
+		# This creates realistic tire saturation
+		var excess = load_ratio - 1.0
+		base_factor = 1.0 - (excess * excess * 0.2)
 
-func _lateral_slip_curve(normalized_slip: float) -> float:
-	# Modified Pacejka-like curve for lateral force
+	# Apply load sensitivity scaling
+	var final_factor = lerp(1.0, base_factor, load_sensitivity)
+
+	# Clamp to reasonable bounds
+	return clamp(final_factor, 0.4, 1.3)
+
+## Pacejka-style longitudinal force curve
+func _calculate_longitudinal_force(slip_ratio: float, p_load: float, peak_mu: float, sliding_mu: float) -> float:
+	var abs_slip = abs(slip_ratio)
+	var sign_slip = sign(slip_ratio)
+
+	if abs_slip < 0.001: # Very small slip - linear region
+		var stiffness = p_load * peak_mu / peak_lon_slip_ratio
+		return slip_ratio * stiffness
+
+	# Normalized slip (1.0 = peak slip)
+	var normalized_slip = abs_slip / peak_lon_slip_ratio
+
+	var force_coefficient: float
+
 	if normalized_slip <= 1.0:
-		# Build-up region: smooth curve to peak
-		return sin(normalized_slip * PI * 0.5) * (2.0 - normalized_slip * 0.3)
+		# Build-up to peak - smooth S-curve
+		var x = normalized_slip
+		force_coefficient = peak_mu * x * (2.0 - x * (1.0 - 0.3 / lon_curve_sharpness))
 	else:
-		# Sliding region: drop to sliding friction
-		var sliding_ratio = sliding_lateral_friction / peak_lateral_friction
+		# Post-peak sliding region
 		var excess_slip = normalized_slip - 1.0
-		return sliding_ratio + (1.0 - sliding_ratio) * exp(-lateral_shape_factor * excess_slip)
+		var slide_factor = exp(-lon_curve_sharpness * excess_slip)
+		force_coefficient = sliding_mu + (peak_mu - sliding_mu) * slide_factor
 
-func _apply_combined_slip_limit(force_lon: float, force_lat: float, max_lon: float, max_lat: float) -> Vector2:
-	# Friction ellipse for combined slip
-	if max_lon <= 0.0 or max_lat <= 0.0:
+	return sign_slip * p_load * force_coefficient
+
+## Pacejka-style lateral force curve
+func _calculate_lateral_force(slip_angle_rad: float, p_load: float, peak_mu: float, sliding_mu: float) -> float:
+	var abs_angle = abs(slip_angle_rad)
+	var sign_angle = sign(slip_angle_rad)
+
+	if abs_angle < 0.001: # Very small slip - linear region
+		var stiffness = p_load * peak_mu / deg_to_rad(peak_lat_slip_angle_deg)
+		return slip_angle_rad * stiffness
+
+	# Normalized slip angle (1.0 = peak slip angle)
+	var normalized_angle = abs_angle / deg_to_rad(peak_lat_slip_angle_deg)
+
+	var force_coefficient: float
+
+	if normalized_angle <= 1.0:
+		# Build-up to peak - uses sin function for realistic tire behavior
+		var x = normalized_angle
+		force_coefficient = peak_mu * sin(x * PI / 2.0) * (1.0 + 0.2 * (1.0 - x))
+	else:
+		# Post-peak sliding region
+		var excess_angle = normalized_angle - 1.0
+		var slide_factor = exp(-lat_curve_sharpness * excess_angle)
+		force_coefficient = sliding_mu + (peak_mu - sliding_mu) * slide_factor
+
+	return sign_angle * p_load * force_coefficient
+
+## Apply friction circle/ellipse limitation
+func _apply_friction_circle(force_lon: float, force_lat: float, max_friction_force: float) -> Vector2:
+	if max_friction_force <= 0.0:
 		return Vector2(force_lat, force_lon)
 
-	# Normalize forces to create ellipse equation
-	var normalized_lon = force_lon / max_lon
-	var normalized_lat = force_lat / max_lat
+	# Use the standard, unweighted magnitude to check if we're outside the circle
+	var force_magnitude = sqrt(force_lon * force_lon + force_lat * force_lat)
 
-	# Elliptical friction limit (ellipse_factor = 1.0 makes it circular)
-	var ellipse_value = (normalized_lon * normalized_lon) + (normalized_lat * normalized_lat) / (ellipse_factor * ellipse_factor)
-
-	if ellipse_value > 1.0 and ellipse_value > 0.0:
-		var scale_factor = 1.0 / sqrt(ellipse_value)
+	if force_magnitude > max_friction_force:
+		# If we are outside, scale the forces back to the edge of the circle
+		var scale_factor = max_friction_force / force_magnitude
 		force_lon *= scale_factor
 		force_lat *= scale_factor
 
 	return Vector2(force_lat, force_lon)
 
-func _reset_deflections() -> void:
-	longitudinal_deflection = 0.0
-	lateral_deflection = 0.0
-	previous_lon_slip = 0.0
-	previous_lat_slip = 0.0
+## Apply tire relaxation - how quickly the tire responds to slip changes.
+## Simulates the physical delay in tire deformation
+func _apply_relaxation(longitudinal_velocity: float, wheel_angular_velocity: float, wheel_radius: float, delta: float) -> void:
+	# Calculate effective speed for relaxation
+	var wheel_speed = abs(wheel_angular_velocity * wheel_radius)
+	var vehicle_speed = abs(longitudinal_velocity)
+	var effective_speed = max(wheel_speed, vehicle_speed, min_relaxation_speed)
 
-# Debug function to visualize slip curves
-func get_slip_curve_data(max_slip: float = 2.0, steps: int = 100) -> Dictionary:
-	var lon_data = []
-	var lat_data = []
+	# Relaxation rate based on how fast we're moving through the contact patch
+	var relaxation_rate = effective_speed / relaxation_length
 
-	for i in range(steps + 1):
-		var slip = (float(i) / steps) * max_slip
-		var normalized_lon = slip / peak_slip_ratio
-		var normalized_lat = slip / deg_to_rad(peak_slip_angle_deg)
+	# Time constant for exponential approach to target
+	var tau = 1.0 / max(relaxation_rate, 0.1) # Prevent division by zero
+	var alpha = 1.0 - exp(-delta / tau)
 
-		lon_data.append(Vector2(slip, _longitudinal_slip_curve(normalized_lon)))
-		lat_data.append(Vector2(slip, _lateral_slip_curve(normalized_lat)))
+	# Smooth approach to target forces
+	current_lon_force = lerp(current_lon_force, target_lon_force, alpha)
+	current_lat_force = lerp(current_lat_force, target_lat_force, alpha)
+
+func _reset_forces() -> void:
+	target_lon_force = 0.0
+	target_lat_force = 0.0
+	current_lon_force = 0.0
+	current_lat_force = 0.0
+
+# Utility functions for tuning and debugging
+
+## Calculate what the peak forces should be at a given load - Useful for tuning and understanding tire behavior
+func get_peak_forces_at_load(p_load: float, surface_mu: float = 1.0) -> Dictionary:
+	var load_factor = _calculate_realistic_load_factor(p_load)
 
 	return {
-		"longitudinal": lon_data,
-		"lateral": lat_data
+		"peak_longitudinal_force": p_load * peak_longitudinal_mu * load_factor * surface_mu,
+		"peak_lateral_force": p_load * peak_lateral_mu * load_factor * surface_mu,
+		"load_factor": load_factor
+	}
+
+## Calculate forces at specific slip values - useful for debugging
+func get_force_at_slip(slip_ratio: float, slip_angle_deg: float, p_load: float, surface_mu: float = 1.0) -> Dictionary:
+	var load_factor = _calculate_realistic_load_factor(p_load)
+	var effective_peak_lon_mu = peak_longitudinal_mu * load_factor * surface_mu
+	var effective_sliding_lon_mu = sliding_longitudinal_mu * load_factor * surface_mu
+	var effective_peak_lat_mu = peak_lateral_mu * load_factor * surface_mu
+	var effective_sliding_lat_mu = sliding_lateral_mu * load_factor * surface_mu
+
+	var lon_force = _calculate_longitudinal_force(slip_ratio, p_load, effective_peak_lon_mu, effective_sliding_lon_mu)
+	var lat_force = _calculate_lateral_force(deg_to_rad(slip_angle_deg), p_load, effective_peak_lat_mu, effective_sliding_lat_mu)
+
+	var limited = _apply_friction_circle(lon_force, lat_force, p_load * surface_mu)
+
+	return {
+		"longitudinal_force": limited.y,
+		"lateral_force": limited.x,
+		"raw_longitudinal_force": lon_force,
+		"raw_lateral_force": lat_force,
+		"combined_limited": (limited.y != lon_force) or (limited.x != lat_force)
+	}
+
+# Generate data for plotting slip curves - useful for tuning
+func generate_slip_curve_data(p_load: float = 4000.0, surface_mu: float = 1.0) -> Dictionary:
+	var lon_curve = []
+	var lat_curve = []
+
+	# Longitudinal curve
+	for i in range(201):
+		var slip = (i - 100) * 0.005 # -0.5 to +0.5 slip ratio
+		var result = get_force_at_slip(slip, 0.0, p_load, surface_mu)
+		lon_curve.append(Vector2(slip, result.longitudinal_force))
+
+	# Lateral curve
+	for i in range(181):
+		var angle = (i - 90) * 0.5 # -45 to +45 degrees
+		var result = get_force_at_slip(0.0, angle, p_load, surface_mu)
+		lat_curve.append(Vector2(angle, result.lateral_force))
+
+	return {
+		"longitudinal_curve": lon_curve,
+		"lateral_curve": lat_curve,
+		"peak_info": get_peak_forces_at_load(p_load, surface_mu)
 	}

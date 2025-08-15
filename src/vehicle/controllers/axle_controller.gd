@@ -1,3 +1,4 @@
+@tool
 class_name AxleController
 extends Node3D
 
@@ -12,9 +13,9 @@ enum DifferentialType {
 @export var label_prefix: String = "Axle"
 ## Wheelbase half to position the wheels.
 ## A front axle might be position at -1.262m
-@export var z_offset: float = -1.35 # Meters
-## Distance between the knuckles.
-@export var track_width: float = 1.75 # Meters
+@export var z_offset: float = -1.35: set = _set_z_offset
+## Distance between the knuckles in metres.
+@export var track_width: float = 1.75: set = _set_track_width
 
 @export_group("Drivetrain Ratios")
 ## Drive ratio indicates how much drive torque is applied to this axle from the clutch.
@@ -91,8 +92,18 @@ var _max_angle_inner_rad: float = 0.0
 var _max_angle_outer_rad: float = 0.0
 #endregion
 
+func _ready() -> void:
+	# Synchronize visuals when the scene is first loaded in the editor
+	if Engine.is_editor_hint():
+		_set_z_offset(z_offset)
+		_set_track_width(track_width)
+
 #region Physics
 func _physics_process(delta: float) -> void:
+	# Guard against running physics in the editor, which causes errors.
+	if Engine.is_editor_hint():
+		return
+
 	# --- Geometric Setup ---
 	if is_solid_axle:
 		# For a solid axle, we enforce the rigid beam constraint first.
@@ -117,7 +128,7 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 	for i in range(wheels.size()):
 		var wheel = wheels[i]
 		# Tire model
-		wheel.tire_model = tire_model.duplicate()
+		wheel.tire_model = tire_model.duplicate(true)
 
 		# Suspension
 		wheel.suspension_stiffness = spring_stiffness
@@ -240,6 +251,19 @@ func get_distributed_torques(total_axle_torque: float) -> Vector2:
 	return Vector2(torque_left, torque_right)
 
 #region Private API
+func _set_z_offset(new_value: float) -> void:
+	z_offset = new_value
+	if Engine.is_editor_hint():
+		position.z = z_offset
+
+func _set_track_width(new_value: float) -> void:
+	track_width = new_value
+	if Engine.is_editor_hint():
+		if is_instance_valid(left_wheel) and is_instance_valid(right_wheel):
+			var half_track = track_width / 2.0
+			left_wheel.position.x = - half_track
+			right_wheel.position.x = half_track
+
 func _update_solid_axle_geometry():
 	# Instead of directly positioning wheels, we enforce the solid axle constraint
 	# by averaging the suspension forces and heights, then applying corrective forces

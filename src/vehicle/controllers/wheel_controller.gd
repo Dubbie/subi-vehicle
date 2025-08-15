@@ -44,11 +44,9 @@ var contact_lon_velocity: float = 0.0
 var current_angular_velocity: float = 0.0
 var drive_torque: float = 0.0
 
-# Slip and bristle deflection for the brush model
+# Slip for tire model
 var lon_slip: float = 0.0
 var lat_slip: float = 0.0
-
-var smoothed_lon_slip: float = 0.0
 #endregion
 
 #region Forces
@@ -109,12 +107,62 @@ func _process(_delta: float) -> void:
 	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lat_force_vector / force_scale), Color.RED, 0.1)
 	DebugDraw3D.draw_arrow(contact_point, contact_point + (lon_force_vector / force_scale), Color.BLUE, 0.1)
+	DebugDraw3D.draw_arrow(global_position, global_position + (target_position + Vector3(0.0, wheel_radius, 0.0)), Color.BLACK, 0.1)
 
 	if has_contact:
 		var text_position = global_position + Vector3.UP * 3.0
-		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [smoothed_lon_slip, lat_slip]
+		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [lon_slip, lat_slip]
 		var load_text = "Load: %.d N\n" % [local_force.y]
 		DebugDraw3D.draw_text(text_position, slip_text + load_text, 32)
+
+	if Input.is_action_just_pressed("debug_load"):
+		debug_suspension_forces()
+
+func debug_suspension_forces():
+	print("=== SUSPENSION DEBUG for %s ===" % name)
+	print("Spring length: %.3f / %.3f" % [current_spring_length, suspension_max_length])
+	print("Compression: %.3f" % [suspension_max_length - current_spring_length])
+	print("Spring force: %.0f N" % [suspension_stiffness * (suspension_max_length - current_spring_length)])
+	print("Vertical load: %.0f N" % [local_force.y])
+	print("Has contact: %s" % has_contact)
+	print("Anti-roll force: %.0f N" % anti_roll_force)
+	print("=============================")
+
+	debug_tire_forces(drive_torque)
+
+func debug_tire_forces(current_drive_torque: float):
+	if not debug_mode or not has_contact:
+		return
+
+	print("=== TIRE FORCES DEBUG for %s ===" % name)
+	print("Load: %.0f N" % local_force.y)
+	print("Lon slip ratio: %.3f" % lon_slip)
+	print("Lat slip angle: %.1f°" % rad_to_deg(lat_slip))
+	print("Contact velocities - Lat: %.2f, Lon: %.2f" % [contact_lat_velocity, contact_lon_velocity])
+	print("Drive torque: %.0f Nm" % current_drive_torque)
+	print("Angular velocity: %.1f rad/s" % current_angular_velocity)
+
+	# Check what the tire model is actually producing
+	var model_params = TireParams.new()
+	model_params.vertical_load = local_force.y
+	model_params.lon_slip_ratio = lon_slip
+	model_params.lat_slip_angle_rad = lat_slip
+	model_params.surface_friction = 1.0 # Assuming standard surface
+	model_params.longitudinal_velocity = contact_lon_velocity
+	model_params.wheel_angular_velocity = current_angular_velocity
+	model_params.wheel_radius = wheel_radius
+	model_params.delta = get_physics_process_delta_time()
+
+	var tire_forces = tire_model.calculate_forces(model_params)
+	print("Raw tire forces - Lat: %.0f N, Lon: %.0f N" % [tire_forces.x, tire_forces.y])
+	print("Final local forces - Lat: %.0f N, Lon: %.0f N, Vert: %.0f N" % [local_force.x, local_force.z, local_force.y])
+
+	# Test what forces SHOULD be at this load
+	var expected_forces = tire_model.get_peak_forces_at_load(local_force.y, 1.0)
+	print("Expected peak forces - Lat: %.0f N, Lon: %.0f N" % [expected_forces.peak_lateral_force, expected_forces.peak_longitudinal_force])
+	print("Load factor: %.2f" % expected_forces.load_factor)
+
+	print("=====================================")
 
 #region Public methods
 func update_state(p_steer_angle: float, delta: float) -> void:
@@ -190,9 +238,16 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	if has_contact:
 		# Calculate slip using angular velocity from end of last physics step
 		var surface_speed = current_angular_velocity * wheel_radius
-		lon_slip = (surface_speed - contact_lon_velocity) / max(abs(contact_lon_velocity), 0.1)
-		smoothed_lon_slip = lerp(smoothed_lon_slip, lon_slip, 0.1) # Smooth for stability
-		lat_slip = atan2(-contact_lat_velocity, abs(contact_lon_velocity) + 0.001)
+
+		# Improved longitudinal slip calculation
+		if abs(contact_lon_velocity) > 0.1:
+			lon_slip = (surface_speed - contact_lon_velocity) / abs(contact_lon_velocity)
+		else:
+			# Handle very low speeds to prevent division by zero
+			lon_slip = surface_speed / (wheel_radius * 1.0) # Normalize by 1 m/s reference
+
+		# Fixed lateral slip angle - don't use abs() on longitudinal velocity!
+		calculate_lateral_slip_simple()
 
 		# Get forces from tire model
 		var model_params = TireParams.new()
@@ -236,8 +291,8 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	delta_rotation = fposmod(delta_rotation, 2 * PI)
 
 	# Update world-space force vectors for debug drawing
-	lon_force_vector = - knuckle_forward * local_force.z
-	lat_force_vector = knuckle_right * local_force.x
+	lon_force_vector = contact_forward * local_force.z
+	lat_force_vector = - contact_right * local_force.x
 
 func apply_forces_to_rigidbody():
 	if not has_contact:
@@ -291,3 +346,31 @@ func _update_contact_velocities() -> void:
 		contact_velocity = Vector3.ZERO
 		contact_lat_velocity = 0.0
 		contact_lon_velocity = 0.0
+
+func calculate_lateral_slip_simple():
+	# Use the vehicle's actual velocity direction vs wheel pointing direction
+	# This ignores wheelspin completely for lateral slip calculation
+	var vehicle_velocity = car.linear_velocity
+	if vehicle_velocity.length() < 0.5:
+		lat_slip = 0.0
+		return
+
+	# Find the angle between vehicle velocity and wheel forward direction
+	var velocity_direction = vehicle_velocity.normalized()
+	var wheel_forward_world = global_transform.basis * Vector3.FORWARD
+
+	# Project both onto horizontal plane
+	velocity_direction.y = 0.0
+	wheel_forward_world.y = 0.0
+	velocity_direction = velocity_direction.normalized()
+	wheel_forward_world = wheel_forward_world.normalized()
+
+	# Calculate angle between them
+	var dot_product = velocity_direction.dot(wheel_forward_world)
+	var cross_product = velocity_direction.cross(wheel_forward_world)
+
+	# The slip angle is the difference between where the wheel points and where it's going
+	lat_slip = atan2(cross_product.y, dot_product)
+
+	# Account for steering input
+	lat_slip += deg_to_rad(current_steer_angle)

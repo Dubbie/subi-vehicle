@@ -115,6 +115,39 @@ func _physics_process(delta: float):
 	# Apply final forces to rigidbody
 	_apply_wheel_forces()
 
+func debug_load_distribution():
+	print("=== LOAD DISTRIBUTION DEBUG ===")
+	var total_load = 0.0
+	var wheel_loads = []
+
+	# Assuming you have references to your axles
+	var wheels = [axles[0].left_wheel, axles[0].right_wheel,
+				  axles[axles.size() - 1].left_wheel, axles[axles.size() - 1].right_wheel]
+	var names = ["FL", "FR", "RL", "RR"]
+
+	for i in range(wheels.size()):
+		var wheel = wheels[i]
+		var p_load = wheel.local_force.y
+		wheel_loads.append(p_load)
+		total_load += p_load
+
+		var expected_static = (mass * 9.81) / 4.0
+		var load_percent = (p_load / expected_static) * 100.0
+
+		print("%s: %.0f N (%.1f%% of static quarter-weight)" % [names[i], p_load, load_percent])
+
+	print("Total: %.0f N vs Expected: %.0f N" % [total_load, mass * 9.81])
+	print("Front/Rear: %.1f%% / %.1f%%" % [
+		((wheel_loads[0] + wheel_loads[1]) / total_load) * 100.0,
+		((wheel_loads[2] + wheel_loads[3]) / total_load) * 100.0
+	])
+	print("Left/Right: %.1f%% / %.1f%%" % [
+		((wheel_loads[0] + wheel_loads[2]) / total_load) * 100.0,
+		((wheel_loads[1] + wheel_loads[3]) / total_load) * 100.0
+	])
+	print("Centrifugal Force: %.2f m/s²" % [linear_velocity.cross(angular_velocity).length()])
+	print("==============================")
+
 #region Private Methods
 func _validate_components() -> bool:
 	if not pedal_controller or not steering_controller or not drivetrain_controller:
@@ -136,12 +169,14 @@ func _process_user_controls(delta: float):
 		drivetrain_controller.manual_shift_up()
 	if Input.is_action_just_pressed("shift_down"):
 		drivetrain_controller.manual_shift_down()
+	if Input.is_action_just_pressed("debug_load"):
+		debug_load_distribution()
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, delta)
 	steering_controller.process_inputs(steer_input, delta)
 
 ## Update all axles and check ground contact
-func _update_axles(delta: float) -> void:
+func _update_axles(_delta: float) -> void:
 	grounded = false
 
 	for i in range(axles.size()):
@@ -151,7 +186,7 @@ func _update_axles(delta: float) -> void:
 		if i == 0:
 			axle.set_steer_value(steering_controller.get_steer_value())
 
-		axle.update_wheel_states(delta)
+		# axle.update_wheel_states(delta)
 
 		# Check ground contact
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:

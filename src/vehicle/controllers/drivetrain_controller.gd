@@ -618,7 +618,7 @@ func _calculate_clutch_torque(throttle_input: float, delta: float) -> float:
 	var smoothed_torque = lerp(previous_clutch_torque, target_clutch_torque, smoothing)
 
 	# Rate limiting - prevent torque from changing too fast
-	var max_change_rate = 3000.0 # Nm/s
+	var max_change_rate = 50000.0 # Nm/s
 	var max_change = max_change_rate * delta
 	var change = smoothed_torque - previous_clutch_torque
 	if abs(change) > max_change:

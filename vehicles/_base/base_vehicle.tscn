@@ -117,44 +117,36 @@ point_count = 9
 
 [sub_resource type="Resource" id="Resource_dc6sd"]
 script = ExtResource("7_8g4xo")
-peak_longitudinal_friction = 1.1
-peak_lateral_friction = 1.0
-sliding_longitudinal_friction = 0.8
-sliding_lateral_friction = 0.7
-nominal_load = 3500.0
-load_sensitivity_exponent = 0.05
-peak_slip_ratio = 0.12
-peak_slip_angle_deg = 6.0
-longitudinal_stiffness_factor = 18.0
-lateral_stiffness_factor = 17.0
-longitudinal_shape_factor = 2.0
-lateral_shape_factor = 2.5
-load_sensitivity = 0.8
-camber_stiffness = 0.1
-relaxation_length = 0.3
-transient_response = 0.8
-ellipse_factor = 1.2
+peak_longitudinal_mu = 1.1
+peak_lateral_mu = 1.0
+sliding_longitudinal_mu = 0.8
+sliding_lateral_mu = 0.7
+peak_lon_slip_ratio = 0.12
+peak_lat_slip_angle_deg = 6.0
+lon_curve_sharpness = 1.5
+lat_curve_sharpness = 2.0
+optimal_load = 4000.0
+load_sensitivity = 0.3
+friction_circle_shape = 1.1
+relaxation_length = 0.15
+min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [sub_resource type="Resource" id="Resource_lucts"]
 script = ExtResource("7_8g4xo")
-peak_longitudinal_friction = 1.1
-peak_lateral_friction = 1.0
-sliding_longitudinal_friction = 0.8
-sliding_lateral_friction = 0.7
-nominal_load = 3500.0
-load_sensitivity_exponent = 0.05
-peak_slip_ratio = 0.12
-peak_slip_angle_deg = 6.0
-longitudinal_stiffness_factor = 18.0
-lateral_stiffness_factor = 17.0
-longitudinal_shape_factor = 2.0
-lateral_shape_factor = 2.5
-load_sensitivity = 0.8
-camber_stiffness = 0.1
-relaxation_length = 0.3
-transient_response = 0.8
-ellipse_factor = 1.2
+peak_longitudinal_mu = 1.1
+peak_lateral_mu = 1.0
+sliding_longitudinal_mu = 0.8
+sliding_lateral_mu = 0.7
+peak_lon_slip_ratio = 0.12
+peak_lat_slip_angle_deg = 6.0
+lon_curve_sharpness = 1.5
+lat_curve_sharpness = 2.0
+optimal_load = 4000.0
+load_sensitivity = 0.3
+friction_circle_shape = 1.1
+relaxation_length = 0.15
+min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "aero_controller", "axles")]
@@ -259,7 +251,7 @@ left_wheel = NodePath("WheelRL")
 right_wheel = NodePath("WheelRR")
 
 [node name="WheelRL" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.74, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.735, 0, 0)
 target_position = Vector3(0, -0.4, 0)
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/RearAxle/WheelRL/Animation/Camber/Wheel" index="0"]
@@ -269,7 +261,7 @@ height = 0.205
 sides = 16
 
 [node name="WheelRR" parent="Axles/RearAxle" instance=ExtResource("3_6w078")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.74, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.735, 0, 0)
 target_position = Vector3(0, -0.4, 0)
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Axles/RearAxle/WheelRR/Animation/Camber/Wheel" index="0"]
