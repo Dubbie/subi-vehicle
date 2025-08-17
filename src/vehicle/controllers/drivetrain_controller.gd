@@ -598,18 +598,22 @@ func _calculate_clutch_torque(throttle_input: float, delta: float) -> float:
 		should_lockup = not should_unlock
 
 	if should_lockup:
-		# Lockup mode - transmit exactly what the engine demands (clamped by capacity)
+		# Lockup mode - The clutch is rigid. The transmitted torque is the sum of
+		# the engine's own torque AND a very strong corrective force that synchronizes
+		# the engine and gearbox speeds. This prevents the circular logic bug.
 		clutch_locked_up = true
 		lockup_hysteresis_timer = 0.1 # Stay locked for at least 0.1 seconds
 
 		var static_capacity = effective_capacity * static_friction_multiplier
-		target_clutch_torque = clampf(net_engine_torque, -static_capacity, static_capacity)
 
-		# Add gentle speed correction only if truly locked
-		if abs(slip_velocity) > 0.01:
-			var correction = slip_velocity * engine_inertia * 50.0
-			target_clutch_torque += correction
-			target_clutch_torque = clampf(target_clutch_torque, -static_capacity, static_capacity)
+		# This corrective torque acts like a powerful spring, snapping the speeds together.
+		# The stiffness is based on engine inertia to be stable.
+		var correction_stiffness = engine_inertia * 250.0
+		var corrective_torque = slip_velocity * correction_stiffness
+
+		# The final torque transmitted is the engine's contribution plus the correction.
+		target_clutch_torque = net_engine_torque + corrective_torque
+		target_clutch_torque = clampf(target_clutch_torque, -static_capacity, static_capacity)
 	else:
 		# Slipping mode - kinetic friction
 		clutch_locked_up = false
