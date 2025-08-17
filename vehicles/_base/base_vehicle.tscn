@@ -239,6 +239,7 @@ sides = 16
 [node name="RearAxle" type="Node3D" parent="Axles" node_paths=PackedStringArray("left_wheel", "right_wheel")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.262)
 script = ExtResource("3_o7ea4")
+label_prefix = "Rear"
 z_offset = 1.262
 track_width = 1.47
 drive_ratio = 1.0

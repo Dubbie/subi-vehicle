@@ -2,6 +2,8 @@ class_name VehicleController
 extends RigidBody3D
 
 #region Export Variables
+@export var is_controlled: bool = false
+
 @export_group("Components")
 @export var pedal_controller: PedalController
 @export var steering_controller: SteeringController
@@ -76,7 +78,7 @@ func _ready():
 	drivetrain_controller.clutch_overheated.connect(_on_clutch_overheated)
 
 func _process(_delta: float):
-	if debug_mode:
+	if debug_mode and is_controlled:
 		_update_debug_display()
 
 		var com_world: Vector3 = to_global(center_of_mass)
@@ -167,6 +169,8 @@ func _validate_components() -> bool:
 
 ## Process all user inputs
 func _process_user_controls(delta: float):
+	if not is_controlled: return
+
 	var gas_input = Input.is_action_pressed("gas") and not restrict_gas
 	var brake_input = Input.is_action_pressed("brake")
 	var handbrake_input = Input.is_action_pressed("handbrake")
@@ -302,8 +306,8 @@ func _update_debug_display():
 	if not engine_label:
 		return
 
-	engine_label.visible = debug_mode
-	if not debug_mode:
+	engine_label.visible = debug_mode and is_controlled
+	if not engine_label.visible:
 		return
 
 	var diagnostics = drivetrain_controller._get_diagnostics()

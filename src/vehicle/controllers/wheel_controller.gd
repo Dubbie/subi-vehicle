@@ -101,7 +101,7 @@ func _process(_delta: float) -> void:
 	wheel_node.basis = toe_rotation * spin_rotation
 
 	# Debug visualization
-	if not debug_mode or not has_contact: return
+	if not (debug_mode and car.is_controlled) or not has_contact: return
 
 	var force_scale: float = car.mass
 	DebugDraw3D.draw_arrow(global_position, global_position + (load_force_vector / force_scale), Color.GREEN, 0.1)
