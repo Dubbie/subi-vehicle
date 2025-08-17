@@ -101,27 +101,6 @@ func _ready() -> void:
 		_set_z_offset(z_offset)
 		_set_track_width(track_width)
 
-#region Physics
-func _physics_process(delta: float) -> void:
-	# Guard against running physics in the editor, which causes errors.
-	if Engine.is_editor_hint():
-		return
-
-	# --- Geometric Setup ---
-	if is_solid_axle:
-		# For a solid axle, we enforce the rigid beam constraint first.
-		_update_solid_axle_geometry()
-	else:
-		# For an independent suspension, we calculate and apply anti-roll bar forces.
-		_update_independent_suspension_forces()
-
-	# --- Wheel State Update ---
-	# Now that the geometry and extra forces are set, we tell each wheel to
-	# update its own state based on its (potentially new) position.
-	left_wheel.update_state(steer_angle_left, delta)
-	right_wheel.update_state(steer_angle_right, delta)
-#endregion
-
 #region Public API
 func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 	_wheelbase = p_wheelbase
@@ -193,32 +172,69 @@ func set_steer_value(steer_value: float) -> void:
 		steer_angle_left = - current_angle_outer_deg
 		steer_angle_right = - current_angle_inner_deg
 
+func update_axle_and_wheel_states(delta: float) -> void:
+	# Guard against running physics in the editor, which causes errors.
+	if Engine.is_editor_hint():
+		return
+
+	# --- Geometric Setup ---
+	if is_solid_axle:
+		# For a solid axle, we enforce the rigid beam constraint first.
+		_update_solid_axle_geometry()
+	else:
+		# For an independent suspension, we calculate and apply anti-roll bar forces.
+		_update_independent_suspension_forces()
+
+	# --- Wheel State Update ---
+	# Now that the geometry and extra forces are set, we tell each wheel to
+	# update its own state based on its (potentially new) position.
+	left_wheel.update_state(steer_angle_left, delta)
+	right_wheel.update_state(steer_angle_right, delta)
+
 func update_wheel_states(delta: float) -> void:
 	left_wheel.update_state(steer_angle_left, delta)
 	right_wheel.update_state(steer_angle_right, delta)
+
 
 func get_distributed_torques(total_axle_torque: float) -> Vector2:
 	# 1. Start with a basic 50/50 open differential split.
 	var torque_left = total_axle_torque * 0.5
 	var torque_right = total_axle_torque * 0.5
 
-	# 2. Calculate the speed difference between the wheels.
-	var speed_difference = left_wheel.current_angular_velocity - right_wheel.current_angular_velocity
+	# 2. Apply differential logic based on its type.
+	match differential_type:
+		DifferentialType.OPEN:
+			pass # No changes for an open diff.
 
-	# 3. Determine the locking torque the differential wants to apply to resist this difference.
-	# It's the speed difference multiplied by a high stiffness, but CAPPED by the diff's physical capacity.
-	# This CLAMP is the crucial step that prevents instability.
-	var stiffness = 1000.0 # A high value to make it react quickly
-	var locking_torque = clamp(abs(speed_difference) * stiffness, 0.0, differential_lock_capacity)
+		DifferentialType.LOCKED:
+			var speed_difference_lock = left_wheel.current_angular_velocity - right_wheel.current_angular_velocity
+			var locking_torque_lock = speed_difference_lock * locking_stiffness
+			locking_torque_lock = clamp(locking_torque_lock, -differential_lock_capacity, differential_lock_capacity)
+			torque_left -= locking_torque_lock
+			torque_right += locking_torque_lock
 
-	# 4. Transfer the locking torque from the faster wheel to the slower wheel.
-	# The sign of the speed_difference tells us which way to transfer.
-	if speed_difference > 0: # Left wheel is faster
-		torque_left -= locking_torque
-		torque_right += locking_torque
-	else: # Right wheel is faster
-		torque_left += locking_torque
-		torque_right -= locking_torque
+		DifferentialType.LIMITED_SLIP:
+			if abs(total_axle_torque) < 1.0:
+				return Vector2(torque_left, torque_right)
+
+			var speed_difference_lsd = left_wheel.current_angular_velocity - right_wheel.current_angular_velocity
+
+			# Only engage if there is a speed difference.
+			if abs(speed_difference_lsd) > 0.1:
+				# 1. Calculate the locking torque based on the TOTAL INPUT TORQUE.
+				# This is the crucial change. The more throttle you give, the harder it locks.
+				var locking_torque = abs(total_axle_torque * lsd_power_lock_factor)
+
+				# 2. This locking force is still limited by the physical max capacity of the clutches.
+				locking_torque = clamp(locking_torque, 0.0, differential_lock_capacity)
+
+				# 3. Transfer this torque from the faster wheel to the slower wheel.
+				if speed_difference_lsd > 0: # Left is faster, gives torque to Right
+					torque_left -= locking_torque
+					torque_right += locking_torque
+				else: # Right is faster, gives torque to Left
+					torque_right -= locking_torque
+					torque_left += locking_torque
 
 	return Vector2(torque_left, torque_right)
 
@@ -296,5 +312,5 @@ func _update_independent_suspension_forces():
 		var compression_diff = left_wheel.current_spring_length - right_wheel.current_spring_length
 		arb_force = compression_diff * anti_roll_stiffness
 
-	left_wheel.anti_roll_force = arb_force
-	right_wheel.anti_roll_force = - arb_force
+	left_wheel.anti_roll_force = - arb_force
+	right_wheel.anti_roll_force = arb_force

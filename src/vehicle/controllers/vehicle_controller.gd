@@ -15,13 +15,14 @@ extends RigidBody3D
 @export var weight: float = 1250.0
 @export var axles: Array[AxleController] = []
 @export var max_steer_angle: float = 38.0
+## Damping force applied to driven axles at very low speed to prevent oscillation.
+@export var low_speed_axle_damping: float = 25.0
 
 @export_group("Brakes")
 @export var max_brake_torque: float = 4000.0
 @export var max_handbrake_torque: float = 2000.0
 
 @export_group("Debug")
-@export var physics_sub_steps: int = 8
 @export var debug_mode: bool = true:
 	set(value):
 		debug_mode = value
@@ -78,12 +79,11 @@ func _ready():
 	drivetrain_controller.clutch_overheated.connect(_on_clutch_overheated)
 
 func _process(_delta: float):
+	pass
 	if debug_mode and is_controlled:
 		_update_debug_display()
-
 		var com_world: Vector3 = to_global(center_of_mass)
 		DebugDraw3D.draw_sphere(com_world, 0.1, Color.WHITE)
-
 func _physics_process(delta: float):
 	if not _validate_components():
 		return
@@ -95,35 +95,45 @@ func _physics_process(delta: float):
 	var horizontal_velocity = Vector3(linear_velocity.x, 0, linear_velocity.z)
 	vehicle_speed = horizontal_velocity.length()
 
-	# Update axle states and check ground contact
-	_update_axles(delta)
+	# Update axles
+	grounded = false
+	for i in range(axles.size()):
+		var axle = axles[i]
+		# Apply steering to front axle
+		if i == 0:
+			axle.set_steer_value(steering_controller.get_steer_value())
+
+		# Call the renamed function to update suspension, ARBs, etc.
+		axle.update_axle_and_wheel_states(delta)
+
+		# Check ground contact
+		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
+			grounded = true
 
 	# Get wheel angular velocities for drivetrain
 	var wheel_angular_velocities = _get_driven_wheel_speeds()
 
-	# Update drivetrain system
-	var sub_step_delta = delta / physics_sub_steps
-	for i in range(physics_sub_steps):
-		var drivetrain_result = drivetrain_controller.update_drivetrain(
-			pedal_controller.get_throttle() if not restrict_gas else 0.0,
-			pedal_controller.get_clutch(),
-			pedal_controller.get_brake(),
-			pedal_controller.get_handbrake(),
-			vehicle_speed,
-			wheel_angular_velocities,
-			grounded,
-			sub_step_delta
-		)
+	# Update drivetrain
+	var drivetrain_result = drivetrain_controller.update_drivetrain(
+		pedal_controller.get_throttle() if not restrict_gas else 0.0,
+		pedal_controller.get_clutch(),
+		pedal_controller.get_brake(),
+		pedal_controller.get_handbrake(),
+		vehicle_speed,
+		wheel_angular_velocities,
+		grounded,
+		delta
+	)
 
-		# Cache drivetrain results
-		current_drivetrain_torque = drivetrain_result.torque
-		current_gear = drivetrain_result.gear
-		current_engine_rpm = drivetrain_result.rpm
+	# Cache drivetrain results
+	current_drivetrain_torque = drivetrain_result.torque
+	current_gear = drivetrain_result.gear
+	current_engine_rpm = drivetrain_result.rpm
 
-		# Apply torque to wheels
-		_apply_wheel_torques(sub_step_delta)
+	# Apply torque to wheels. This function calculates wheel spin and tire forces.
+	_apply_wheel_torques(delta)
 
-	# Apply final forces to rigidbody
+	# Apply the final calculated forces from the last sub-step to the rigidbody
 	_apply_wheel_forces()
 
 func debug_load_distribution():
@@ -182,28 +192,15 @@ func _process_user_controls(delta: float):
 		drivetrain_controller.manual_shift_up()
 	if Input.is_action_just_pressed("shift_down"):
 		drivetrain_controller.manual_shift_down()
+
+	# Debug
 	if Input.is_action_just_pressed("debug_load"):
 		debug_load_distribution()
+	if Input.is_action_just_pressed("toggle_debug"):
+		debug_mode = not debug_mode
 
 	pedal_controller.process_inputs(gas_input, brake_input, handbrake_input, clutch_input, delta)
 	steering_controller.process_inputs(steer_input, delta)
-
-## Update all axles and check ground contact
-func _update_axles(_delta: float) -> void:
-	grounded = false
-
-	for i in range(axles.size()):
-		var axle = axles[i]
-
-		# Apply steering to front axle
-		if i == 0:
-			axle.set_steer_value(steering_controller.get_steer_value())
-
-		# axle.update_wheel_states(delta)
-
-		# Check ground contact
-		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
-			grounded = true
 
 ## Get angular velocities of driven wheels for drivetrain calculation
 func _get_driven_wheel_speeds() -> Array[float]:
@@ -232,27 +229,41 @@ func _apply_wheel_torques(delta: float) -> void:
 		if axle.drive_ratio > 0.0:
 			axle_drive_torque = current_drivetrain_torque * axle.diff_ratio
 
-		# --- MODIFIED PART ---
+		# --- NEW AXLE DAMPING LOGIC (THE FIX) ---
+		# At very low vehicle speeds, apply a damping force to the entire axle's
+		# drive torque *before* it gets to the differential.
+		var stiction_speed_threshold: float = 1.0 # m/s
+		if vehicle_speed < stiction_speed_threshold and axle.drive_ratio > 0.0:
+			# Get the average rotational speed of the axle
+			var avg_axle_speed = (axle.left_wheel.current_angular_velocity + axle.right_wheel.current_angular_velocity) * 0.5
+
+			# Calculate a damping torque that opposes the average rotation
+			var axle_damping_torque = avg_axle_speed * low_speed_axle_damping
+
+			# Apply the damping directly to the axle's input torque
+			axle_drive_torque -= axle_damping_torque
+		# --- END OF NEW LOGIC ---
+
 		# Get the distributed drive torques from the axle's differential simulation
+		# This now receives the potentially damped torque, solving the feedback loop.
 		var distributed_drive_torques: Vector2 = axle.get_distributed_torques(axle_drive_torque)
 		var drive_torque_left = distributed_drive_torques.x
 		var drive_torque_right = distributed_drive_torques.y
-		# --- END OF MODIFICATION ---
 
-		# Calculate brake torque per wheel (this remains the same)
+		# Calculate brake torque per wheel
 		var brake_torque_per_wheel = brake_torque * axle.brake_ratio
 		var handbrake_per_wheel = handbrake_torque * axle.handbrake_ratio
 
 		# Apply the final calculated torques to each wheel
 		axle.left_wheel.calculate_wheel_physics(
-			drive_torque_left, # Use the new value
+			drive_torque_left,
 			brake_torque_per_wheel + handbrake_per_wheel,
 			1.0,
 			delta
 		)
 
 		axle.right_wheel.calculate_wheel_physics(
-			drive_torque_right, # Use the new value
+			drive_torque_right,
 			brake_torque_per_wheel + handbrake_per_wheel,
 			1.0,
 			delta

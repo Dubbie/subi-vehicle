@@ -460,11 +460,11 @@ func _calculate_shift_speeds() -> void:
 		if gear_ratio > 0.0:
 			var upshift_wheel_rpm = upshift_rpm / (gear_ratio * differential_ratio)
 			var upshift_speed = (upshift_wheel_rpm * 2.0 * PI / 60.0) * wheel_radius
-			_upshift_speeds.append(upshift_speed * 0.85)
+			_upshift_speeds.append(upshift_speed * 0.95)
 
 			var downshift_wheel_rpm = downshift_rpm / (gear_ratio * differential_ratio)
 			var downshift_speed = (downshift_wheel_rpm * 2.0 * PI / 60.0) * wheel_radius
-			_downshift_speeds.append(downshift_speed * 0.85)
+			_downshift_speeds.append(downshift_speed * 0.95)
 		else:
 			_upshift_speeds.append(999.0)
 			_downshift_speeds.append(0.0)

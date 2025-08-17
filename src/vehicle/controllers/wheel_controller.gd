@@ -171,9 +171,6 @@ func update_state(p_steer_angle: float, delta: float) -> void:
 	_update_contact_velocities()
 
 func _update_spring_and_contact(delta: float) -> void:
-	# Reset anti-roll from last frame
-	anti_roll_force = 0.0
-
 	force_raycast_update()
 	has_contact = is_colliding()
 
@@ -182,48 +179,34 @@ func _update_spring_and_contact(delta: float) -> void:
 		contact_normal = get_collision_normal()
 		var ray_length = global_position.distance_to(get_collision_point())
 		current_spring_length = ray_length - wheel_radius
-
-		# Keep spring length within bounds
 		current_spring_length = clamp(current_spring_length, 0.0, suspension_max_length)
 	else:
-		# No contact - spring extends to max
 		contact_point = Vector3.ZERO
 		contact_normal = Vector3.UP
 		current_spring_length = suspension_max_length
 
-	# Spring force - based on compression from rest length
 	var compression_distance = suspension_max_length - current_spring_length
 	var spring_force = suspension_stiffness * compression_distance
 
-	# Damper force calculation
-	# Spring velocity: positive = extending, negative = compressing
 	var spring_velocity = (current_spring_length - last_spring_length) / delta
 
-	# Different damping for bump vs rebound
 	var damper_force: float
 	if spring_velocity < 0.0: # Compressing (bump)
-		damper_force = suspension_bump_damping * abs(spring_velocity)
+		damper_force = - suspension_bump_damping * spring_velocity
 	else: # Extending (rebound)
 		damper_force = - suspension_rebound_damping * spring_velocity
 
-	# Total suspension force
-	# Spring pushes up when compressed, damper opposes motion, anti-roll can go either way
+	# Total suspension force now correctly includes the anti-roll bar force
 	var total_suspension_force = spring_force + damper_force + anti_roll_force
 
-	# Handle force limits based on contact
 	if has_contact:
-		# Can't pull through ground
 		total_suspension_force = max(0.0, total_suspension_force)
-
 		local_force.y = total_suspension_force
 		load_force_vector = total_suspension_force * contact_normal
 	else:
-		# Allow some downward pull but limit it to prevent weird behavior
-		var max_pull_force = suspension_stiffness * 0.1 # 10% of max spring force
+		var max_pull_force = suspension_stiffness * 0.1
 		total_suspension_force = max(-max_pull_force, total_suspension_force)
-
 		local_force.y = total_suspension_force
-		# Use wheel's up direction since no contact normal
 		load_force_vector = total_suspension_force * global_transform.basis.y
 
 	last_spring_length = current_spring_length
@@ -351,15 +334,18 @@ func _update_contact_velocities() -> void:
 func _calculate_longitudinal_slip() -> void:
 	var surface_speed = current_angular_velocity * wheel_radius
 
-	# Use a small reference speed to prevent division by zero and improve low-speed behavior
-	var reference_speed = max(abs(contact_lon_velocity), 0.1) # 0.5 m/s minimum
+	# Below this speed, the standard slip formula is too unstable.
+	var low_speed_threshold = 1.0
 
-	# Standard SAE slip ratio definition
-	if abs(contact_lon_velocity) > 0.1:
+	if abs(contact_lon_velocity) > low_speed_threshold:
+		# STANDARD FORMULA: Used at normal driving speeds
 		lon_slip = (surface_speed - contact_lon_velocity) / abs(contact_lon_velocity)
 	else:
-		# At very low speeds, use surface speed normalized by reference speed
-		lon_slip = surface_speed / reference_speed
+		# LOW-SPEED APPROXIMATION: Used when stationary or crawling
+		# This prevents division by zero and provides stable grip for launching.
+		# We use a slightly larger reference speed to make it less sensitive.
+		var reference_speed = max(low_speed_threshold, 0.5)
+		lon_slip = (surface_speed - contact_lon_velocity) / reference_speed
 
 	# Clamp to reasonable limits to prevent numerical issues
 	lon_slip = clamp(lon_slip, -2.0, 2.0)
