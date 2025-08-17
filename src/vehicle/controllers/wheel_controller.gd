@@ -236,18 +236,11 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	# Need to do this before applying new torques
 	var tire_forces = Vector2.ZERO
 	if has_contact:
-		# Calculate slip using angular velocity from end of last physics step
-		var surface_speed = current_angular_velocity * wheel_radius
+		 # Calculate longitudinal slip - improved low speed handling
+		_calculate_longitudinal_slip()
 
-		# Improved longitudinal slip calculation
-		if abs(contact_lon_velocity) > 0.1:
-			lon_slip = (surface_speed - contact_lon_velocity) / abs(contact_lon_velocity)
-		else:
-			# Handle very low speeds to prevent division by zero
-			lon_slip = surface_speed / (wheel_radius * 1.0) # Normalize by 1 m/s reference
-
-		# Fixed lateral slip angle - don't use abs() on longitudinal velocity!
-		calculate_lateral_slip_simple()
+		# Calculate lateral slip using actual wheel contact velocity
+		_calculate_lateral_slip()
 
 		# Get forces from tire model
 		var model_params = TireParams.new()
@@ -292,7 +285,7 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 
 	# Update world-space force vectors for debug drawing
 	lon_force_vector = contact_forward * local_force.z
-	lat_force_vector = - contact_right * local_force.x
+	lat_force_vector = contact_right * -local_force.x
 
 func apply_forces_to_rigidbody():
 	if not has_contact:
@@ -307,7 +300,7 @@ func _update_knuckle(steer_angle: float) -> void:
 	current_steer_angle = steer_angle
 	var right_vec = global_transform.basis.x
 	var up_vec = global_transform.basis.y
-	var fwd_vec = global_transform.basis.z
+	var fwd_vec = - global_transform.basis.z
 	var steer_rad = deg_to_rad(steer_angle)
 	var camber_rad = deg_to_rad(camber_angle_deg)
 	var caster_rad = deg_to_rad(caster_angle_deg)
@@ -324,9 +317,11 @@ func _update_knuckle(steer_angle: float) -> void:
 
 func _update_contact_velocities() -> void:
 	if has_contact:
+		# Calculate contact basis vectors
 		contact_right = knuckle_right.slide(contact_normal).normalized()
 		contact_forward = - contact_right.cross(contact_normal).normalized()
 
+		# Get velocity of the contact point on the colliding object
 		var collider = get_collider()
 		var contact_object_velocity: Vector3 = Vector3.ZERO
 		if collider is RigidBody3D:
@@ -334,10 +329,16 @@ func _update_contact_velocities() -> void:
 		elif collider is CharacterBody3D:
 			contact_object_velocity = collider.velocity
 
+		# Calculate velocity of this wheel's contact point
 		var body_point_velocity = car.linear_velocity + car.angular_velocity.cross(contact_point - car.global_position)
+
+		# Relative velocity between wheel and ground
 		var relative_velocity = body_point_velocity - contact_object_velocity
 
+		# Project onto contact plane (remove normal component)
 		contact_velocity = relative_velocity - contact_normal * relative_velocity.dot(contact_normal)
+
+		# Decompose into lateral and longitudinal components
 		contact_lat_velocity = contact_velocity.dot(contact_right)
 		contact_lon_velocity = contact_velocity.dot(contact_forward)
 	else:
@@ -347,30 +348,41 @@ func _update_contact_velocities() -> void:
 		contact_lat_velocity = 0.0
 		contact_lon_velocity = 0.0
 
-func calculate_lateral_slip_simple():
-	# Use the vehicle's actual velocity direction vs wheel pointing direction
-	# This ignores wheelspin completely for lateral slip calculation
-	var vehicle_velocity = car.linear_velocity
-	if vehicle_velocity.length() < 0.5:
+func _calculate_longitudinal_slip() -> void:
+	var surface_speed = current_angular_velocity * wheel_radius
+
+	# Use a small reference speed to prevent division by zero and improve low-speed behavior
+	var reference_speed = max(abs(contact_lon_velocity), 0.1) # 0.5 m/s minimum
+
+	# Standard SAE slip ratio definition
+	if abs(contact_lon_velocity) > 0.1:
+		lon_slip = (surface_speed - contact_lon_velocity) / abs(contact_lon_velocity)
+	else:
+		# At very low speeds, use surface speed normalized by reference speed
+		lon_slip = surface_speed / reference_speed
+
+	# Clamp to reasonable limits to prevent numerical issues
+	lon_slip = clamp(lon_slip, -2.0, 2.0)
+
+func _calculate_lateral_slip() -> void:
+	if contact_velocity.length() < 0.5:
 		lat_slip = 0.0
 		return
 
-	# Find the angle between vehicle velocity and wheel forward direction
-	var velocity_direction = vehicle_velocity.normalized()
-	var wheel_forward_world = global_transform.basis * Vector3.FORWARD
+	# Since knuckle_forward now points forward and knuckle_right points right,
+	# we can directly use the velocity components we already calculated
 
-	# Project both onto horizontal plane
-	velocity_direction.y = 0.0
-	wheel_forward_world.y = 0.0
-	velocity_direction = velocity_direction.normalized()
-	wheel_forward_world = wheel_forward_world.normalized()
+	# contact_lat_velocity = how fast we're moving sideways (+ = moving right)
+	# contact_lon_velocity = how fast we're moving forward (+ = moving forward)
 
-	# Calculate angle between them
-	var dot_product = velocity_direction.dot(wheel_forward_world)
-	var cross_product = velocity_direction.cross(wheel_forward_world)
+	if abs(contact_lon_velocity) > 0.1:
+		# Slip angle is simply the arctangent of lateral velocity / longitudinal velocity
+		# This gives us the angle between where we're going vs where wheel points
+		lat_slip = atan2(contact_lat_velocity, abs(contact_lon_velocity))
+	else:
+		# At very low speeds, use a different approach
+		# Use lateral velocity directly with some scaling
+		lat_slip = contact_lat_velocity / 2.0 # Arbitrary scaling for low speeds
 
-	# The slip angle is the difference between where the wheel points and where it's going
-	lat_slip = atan2(cross_product.y, dot_product)
-
-	# Account for steering input
-	lat_slip += deg_to_rad(current_steer_angle)
+	# Clamp to reasonable limits (±30 degrees is more realistic than ±45)
+	lat_slip = clamp(lat_slip, deg_to_rad(-30), deg_to_rad(30))

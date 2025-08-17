@@ -7,6 +7,7 @@ extends RigidBody3D
 @export var steering_controller: SteeringController
 @export var drivetrain_controller: DrivetrainController
 @export var aero_controller: AeroController
+@export var ecu_controller: ECUController
 
 @export_group("Vehicle Configuration")
 @export var weight: float = 1250.0
@@ -50,8 +51,16 @@ func _ready():
 		push_error("DrivetrainController is required but not assigned.")
 		return
 
+	if not ecu_controller:
+		push_error("ECUController is required but not assigned.")
+		return
+
 	if not pedal_controller or not steering_controller:
 		push_error("PedalController and SteeringController are required.")
+		return
+
+	if not aero_controller:
+		push_error("AeroController is required but not assigned.")
 		return
 
 	# Setup vehicle systems
@@ -284,7 +293,8 @@ func _initialize_drivetrain():
 	var primary_axle = _driven_axles[0]
 	drivetrain_controller.initialize_drivetrain(
 		primary_axle.left_wheel.wheel_radius,
-		primary_axle.diff_ratio
+		primary_axle.diff_ratio,
+		ecu_controller,
 	)
 
 ## Update debug information display

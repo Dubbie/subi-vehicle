@@ -66,6 +66,9 @@ enum DifferentialType {
 ## For a Locked Differential, this determines how rigidly it forces the wheels
 ## to the same speed. This needs to be somewhat low so we don't break the physics.
 @export var locking_stiffness: float = 150.0
+## It's the maximum torque (in Nm) the diff can transfer to resist slip.
+## 200-800 is a good range for an LSD. 5000+ simulates a locked diff.
+@export var differential_lock_capacity: float = 400.0
 
 @export_group("Wheels")
 ## Visually positioning the wheels. Not used at the moment.
@@ -195,58 +198,27 @@ func update_wheel_states(delta: float) -> void:
 	right_wheel.update_state(steer_angle_right, delta)
 
 func get_distributed_torques(total_axle_torque: float) -> Vector2:
-	var torque_left: float = 0.0
-	var torque_right: float = 0.0
+	# 1. Start with a basic 50/50 open differential split.
+	var torque_left = total_axle_torque * 0.5
+	var torque_right = total_axle_torque * 0.5
 
-	match differential_type:
-		DifferentialType.OPEN:
-			# For a simple simulation, both Open and Locked differentials start with a 50/50 torque split.
-			# - An Open diff is limited by the wheel with the least grip. Our tire model handles this naturally
-			#   by allowing the low-grip wheel to spin up (slip).
-			# - A Locked diff forces wheels to the same speed. The tire model creates counteracting forces
-			#   when they are forced to slip against the road surface, simulating the lock.
-			torque_left = total_axle_torque * 0.5
-			torque_right = total_axle_torque * 0.5
+	# 2. Calculate the speed difference between the wheels.
+	var speed_difference = left_wheel.current_angular_velocity - right_wheel.current_angular_velocity
 
-		DifferentialType.LOCKED:
-			var wheel_speed_left_rads = left_wheel.current_angular_velocity
-			var wheel_speed_right_rads = right_wheel.current_angular_velocity
-			var speed_difference = wheel_speed_left_rads - wheel_speed_right_rads
+	# 3. Determine the locking torque the differential wants to apply to resist this difference.
+	# It's the speed difference multiplied by a high stiffness, but CAPPED by the diff's physical capacity.
+	# This CLAMP is the crucial step that prevents instability.
+	var stiffness = 1000.0 # A high value to make it react quickly
+	var locking_torque = clamp(abs(speed_difference) * stiffness, 0.0, differential_lock_capacity)
 
-			# 1. Calculate a massive corrective torque based on the speed difference and a high stiffness value.
-			# This simulates a near-rigid connection between the wheels.
-			var correction_torque = speed_difference * locking_stiffness
-
-			# 2. Apply this torque to counteract the speed difference.
-			# It's subtracted from the faster wheel and added to the slower wheel.
-			torque_left = (total_axle_torque * 0.5) - correction_torque
-			torque_right = (total_axle_torque * 0.5) + correction_torque
-
-		DifferentialType.LIMITED_SLIP:
-			var wheel_speed_left_rads = left_wheel.current_angular_velocity
-			var wheel_speed_right_rads = right_wheel.current_angular_velocity
-			var speed_difference = wheel_speed_left_rads - wheel_speed_right_rads
-
-			# 1. Determine the maximum possible locking torque based on input power.
-			var max_locking_torque = abs(total_axle_torque) * lsd_power_lock_factor
-
-			# 2. Determine how much of that lock to apply based on the slip speed.
-			# This creates a smooth engagement instead of an instant, jerky lock.
-			var engagement_factor = clamp(abs(speed_difference) / lsd_engagement_speed, 0.0, 1.0)
-
-			# 3. Calculate the final locking torque.
-			var locking_torque = max_locking_torque * engagement_factor
-
-			# The locking torque is applied from the faster wheel to the slower wheel.
-			# The sign of speed_difference tells us which way to apply it.
-			locking_torque *= -sign(speed_difference)
-
-			# Start with a 50/50 split and then apply the locking torque.
-			torque_left = (total_axle_torque * 0.5) + locking_torque
-			torque_right = (total_axle_torque * 0.5) - locking_torque
-
-			# Debug
-			# print("Axle: ", name, " SpeedDiff: ", speed_difference, " LockingTorque: ", locking_torque, " TotalAxleTorque: ", total_axle_torque)
+	# 4. Transfer the locking torque from the faster wheel to the slower wheel.
+	# The sign of the speed_difference tells us which way to transfer.
+	if speed_difference > 0: # Left wheel is faster
+		torque_left -= locking_torque
+		torque_right += locking_torque
+	else: # Right wheel is faster
+		torque_left += locking_torque
+		torque_right -= locking_torque
 
 	return Vector2(torque_left, torque_right)
 

@@ -127,6 +127,9 @@ var _downshift_speeds: Array[float] = []
 # Drivetrain configuration (set by vehicle)
 var wheel_radius: float = 0.3
 var differential_ratio: float = 3.9
+
+# Ecu controller
+var ecu_controller: ECUController = null
 #endregion
 
 func _ready():
@@ -135,9 +138,10 @@ func _ready():
 	clutch_temperature = 20.0
 
 ## Initialize drivetrain with vehicle-specific parameters
-func initialize_drivetrain(wheel_r: float, diff_ratio: float) -> void:
+func initialize_drivetrain(wheel_r: float, diff_ratio: float, ecu: ECUController) -> void:
 	wheel_radius = wheel_r
 	differential_ratio = diff_ratio
+	ecu_controller = ecu
 	_calculate_shift_speeds()
 
 ## Main update function - processes all drivetrain components together
@@ -196,12 +200,20 @@ func update_drivetrain(
 
 ## Update engine physics
 func _update_engine(throttle_input: float, clutch_reaction_torque: float, delta: float) -> void:
-	# Calculate engine torque
+	# Determine if the ECU is cutting fuel
+	var is_fuel_cut = false
+	if ecu_controller:
+		# The ECU now directly tells us if fuel is cut
+		is_fuel_cut = ecu_controller.is_fuel_cut_active(engine_rpm)
+
+	# Calculate engine torque, considering the rev limiter
 	var throttle_torque = 0.0
-	if torque_curve:
+	if torque_curve and not is_fuel_cut: # Only produce torque if fuel is not cut
 		throttle_torque = torque_curve.sample_baked(engine_rpm) * clampf(throttle_input, 0.0, 1.0)
 
 	var friction_torque = engine_friction_coefficient * engine_angular_velocity
+	# Engine braking torque is also a result of compression and not fuel,
+	# so it should still apply. We'll keep it for realism.
 	var brake_torque = engine_brake_torque * (1.0 - clampf(throttle_input, 0.0, 1.0))
 
 	# Net torque calculation
@@ -211,10 +223,10 @@ func _update_engine(throttle_input: float, clutch_reaction_torque: float, delta:
 	var angular_acceleration = net_torque / engine_inertia
 	engine_angular_velocity += angular_acceleration * delta
 
-	# Apply RPM limits
-	var min_angular_velocity = engine_min_rpm * RPM_TO_RADS
-	var max_angular_velocity = engine_max_rpm * RPM_TO_RADS
-	engine_angular_velocity = clampf(engine_angular_velocity, min_angular_velocity, max_angular_velocity)
+	# The rev limiter handles the max RPM, but we still need a minimum idle speed
+	if clutch_engagement < 0.1 or current_gear_index == 1: # If clutch is disengaged OR in Neutral
+		var min_angular_velocity = engine_min_rpm * RPM_TO_RADS
+		engine_angular_velocity = max(engine_angular_velocity, min_angular_velocity)
 
 	# Update RPM
 	engine_rpm = engine_angular_velocity * RADS_TO_RPM
@@ -222,11 +234,10 @@ func _update_engine(throttle_input: float, clutch_reaction_torque: float, delta:
 	# Store current engine torque output
 	engine_torque = throttle_torque - friction_torque - brake_torque
 
-	# Proper stall detection - only when engine drops below actual stall RPM
+	# Proper stall detection
 	if engine_rpm <= stall_rpm_threshold:
 		engine_stalled.emit()
-		# Force engine to minimum idle to simulate restart needed
-		engine_rpm = engine_min_rpm
+		engine_rpm = engine_min_rpm # Simulate restart needed
 		engine_angular_velocity = engine_rpm * RPM_TO_RADS
 
 ## Calculate gearbox RPM from wheel speeds

@@ -1,4 +1,4 @@
-[gd_scene load_steps=47 format=3 uid="uid://bmrx0ppni2eb5"]
+[gd_scene load_steps=48 format=3 uid="uid://bmrx0ppni2eb5"]
 
 [ext_resource type="Script" uid="uid://f8e4catt6qsw" path="res://src/vehicle/controllers/vehicle_controller.gd" id="1_v55up"]
 [ext_resource type="Script" uid="uid://do46hehsb6qtm" path="res://src/vehicle/controllers/pedal_controller.gd" id="2_rt677"]
@@ -32,6 +32,7 @@
 [ext_resource type="AudioStream" uid="uid://wt6plh1xn74e" path="res://vehicles/punto_2/assets/engine_sounds/punto_5500_on.wav" id="27_uror7"]
 [ext_resource type="AudioStream" uid="uid://cq4trx6eknhyr" path="res://vehicles/punto_2/assets/engine_sounds/punto_6000_off.wav" id="28_8a8yq"]
 [ext_resource type="AudioStream" uid="uid://mc4x2lfmiyn3" path="res://vehicles/punto_2/assets/engine_sounds/punto_6000_on.wav" id="29_dspcw"]
+[ext_resource type="Script" uid="uid://cf17yy38e847l" path="res://src/vehicle/controllers/ecu_controller.gd" id="30_lkyyl"]
 
 [sub_resource type="Resource" id="Resource_gxs67"]
 script = ExtResource("7_lkyyl")
@@ -128,6 +129,7 @@ lat_curve_sharpness = 2.0
 optimal_load = 4000.0
 load_sensitivity = 0.3
 friction_circle_shape = 1.1
+combined_slip_falloff = 0.3
 relaxation_length = 0.15
 min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
@@ -145,11 +147,12 @@ lat_curve_sharpness = 2.0
 optimal_load = 4000.0
 load_sensitivity = 0.3
 friction_circle_shape = 1.1
+combined_slip_falloff = 0.3
 relaxation_length = 0.15
 min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
-[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "aero_controller", "axles")]
+[node name="BaseVehicle" type="RigidBody3D" node_paths=PackedStringArray("pedal_controller", "steering_controller", "drivetrain_controller", "aero_controller", "ecu_controller", "axles")]
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, 0.16, -0.18)
 script = ExtResource("1_v55up")
@@ -157,6 +160,7 @@ pedal_controller = NodePath("Components/PedalController")
 steering_controller = NodePath("Components/SteeringController")
 drivetrain_controller = NodePath("Components/DrivetrainController")
 aero_controller = NodePath("Components/AeroController")
+ecu_controller = NodePath("Components/ECUController")
 axles = [NodePath("Axles/FrontAxle"), NodePath("Axles/RearAxle")]
 
 [node name="BaseEngineController" parent="." node_paths=PackedStringArray("vehicle_controller") instance=ExtResource("6_3pvif")]
@@ -184,6 +188,10 @@ metadata/_custom_type_script = "uid://c1yiva241nq0e"
 script = ExtResource("5_8g4xo")
 aero_center_point = NodePath("../../AeroCenterPoint")
 metadata/_custom_type_script = "uid://cadt2jrvc23hj"
+
+[node name="ECUController" type="Node" parent="Components"]
+script = ExtResource("30_lkyyl")
+metadata/_custom_type_script = "uid://cf17yy38e847l"
 
 [node name="Axles" type="Node3D" parent="."]
 
