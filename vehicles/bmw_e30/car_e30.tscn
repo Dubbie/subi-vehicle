@@ -46,7 +46,7 @@ min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_fu083"]
-size = Vector3(1, 1.07556, 4.05939)
+size = Vector3(1, 1.0722, 4.13477)
 
 [node name="CarE30" instance=ExtResource("1_0unmn")]
 center_of_mass = Vector3(0, 0.16, -0.05)
@@ -129,8 +129,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0.253)
 [node name="e30" parent="." index="4" instance=ExtResource("3_fu083")]
 transform = Transform3D(-2.085, 0, 3.14826e-07, 0, 2.085, 0, -3.14826e-07, 0, -2.085, 0, -0.471267, -2.05308)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." index="5"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.367981, 0.16275)
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." index="6"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.364227, 0.128906)
 shape = SubResource("BoxShape3D_fu083")
 
 [editable path="Axles/FrontAxle/WheelFL"]
