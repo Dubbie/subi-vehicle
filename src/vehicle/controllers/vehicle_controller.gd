@@ -12,13 +12,17 @@ extends RigidBody3D
 @export var ecu_controller: ECUController
 
 @export_group("Vehicle Configuration")
+## The axles of the vehicle, the first one is the steered one always.
 @export var axles: Array[AxleController] = []
+## The maximum steering angle in degrees.
 @export var max_steer_angle: float = 38.0
 ## Damping force applied to driven axles at very low speed to prevent oscillation.
 @export var low_speed_axle_damping: float = 25.0
 
 @export_group("Brakes")
+## Maximum brake torque in Newton-meters.
 @export var max_brake_torque: float = 4000.0
+## Maximum handbrake torque in Newton-meters.
 @export var max_handbrake_torque: float = 2000.0
 
 @export_group("Debug")
@@ -81,6 +85,7 @@ func _process(_delta: float):
 		_update_debug_display()
 		var com_world: Vector3 = to_global(center_of_mass)
 		DebugDraw3D.draw_sphere(com_world, 0.1, Color.WHITE)
+
 func _physics_process(delta: float):
 	if not _validate_components():
 		return
@@ -132,39 +137,6 @@ func _physics_process(delta: float):
 
 	# Apply the final calculated forces from the last sub-step to the rigidbody
 	_apply_wheel_forces()
-
-func debug_load_distribution():
-	print("=== LOAD DISTRIBUTION DEBUG ===")
-	var total_load = 0.0
-	var wheel_loads = []
-
-	# Assuming you have references to your axles
-	var wheels = [axles[0].left_wheel, axles[0].right_wheel,
-				  axles[axles.size() - 1].left_wheel, axles[axles.size() - 1].right_wheel]
-	var names = ["FL", "FR", "RL", "RR"]
-
-	for i in range(wheels.size()):
-		var wheel = wheels[i]
-		var p_load = wheel.local_force.y
-		wheel_loads.append(p_load)
-		total_load += p_load
-
-		var expected_static = (mass * 9.81) / 4.0
-		var load_percent = (p_load / expected_static) * 100.0
-
-		print("%s: %.0f N (%.1f%% of static quarter-weight)" % [names[i], p_load, load_percent])
-
-	print("Total: %.0f N vs Expected: %.0f N" % [total_load, mass * 9.81])
-	print("Front/Rear: %.1f%% / %.1f%%" % [
-		((wheel_loads[0] + wheel_loads[1]) / total_load) * 100.0,
-		((wheel_loads[2] + wheel_loads[3]) / total_load) * 100.0
-	])
-	print("Left/Right: %.1f%% / %.1f%%" % [
-		((wheel_loads[0] + wheel_loads[2]) / total_load) * 100.0,
-		((wheel_loads[1] + wheel_loads[3]) / total_load) * 100.0
-	])
-	print("Centrifugal Force: %.2f m/s²" % [linear_velocity.cross(angular_velocity).length()])
-	print("==============================")
 
 #region Private Methods
 func _validate_components() -> bool:
@@ -420,4 +392,37 @@ func stall_engine() -> void:
 func reset_drivetrain() -> void:
 	drivetrain_controller.reset_clutch_condition()
 	drivetrain_controller.force_gear(1) # Neutral
-#endregion
+
+## Prints debug information about the load distribution
+func debug_load_distribution():
+	print("=== LOAD DISTRIBUTION DEBUG ===")
+	var total_load = 0.0
+	var wheel_loads = []
+
+	# Assuming you have references to your axles
+	var wheels = [axles[0].left_wheel, axles[0].right_wheel,
+				  axles[axles.size() - 1].left_wheel, axles[axles.size() - 1].right_wheel]
+	var names = ["FL", "FR", "RL", "RR"]
+
+	for i in range(wheels.size()):
+		var wheel = wheels[i]
+		var p_load = wheel.local_force.y
+		wheel_loads.append(p_load)
+		total_load += p_load
+
+		var expected_static = (mass * 9.81) / 4.0
+		var load_percent = (p_load / expected_static) * 100.0
+
+		print("%s: %.0f N (%.1f%% of static quarter-weight)" % [names[i], p_load, load_percent])
+
+	print("Total: %.0f N vs Expected: %.0f N" % [total_load, mass * 9.81])
+	print("Front/Rear: %.1f%% / %.1f%%" % [
+		((wheel_loads[0] + wheel_loads[1]) / total_load) * 100.0,
+		((wheel_loads[2] + wheel_loads[3]) / total_load) * 100.0
+	])
+	print("Left/Right: %.1f%% / %.1f%%" % [
+		((wheel_loads[0] + wheel_loads[2]) / total_load) * 100.0,
+		((wheel_loads[1] + wheel_loads[3]) / total_load) * 100.0
+	])
+	print("Centrifugal Force: %.2f m/s²" % [linear_velocity.cross(angular_velocity).length()])
+	print("==============================")

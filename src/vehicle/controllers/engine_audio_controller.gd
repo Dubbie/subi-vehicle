@@ -20,7 +20,6 @@ var _off_players: Array[AudioStreamPlayer3D]
 var _lower_loop_idx: int = 0
 var _upper_loop_idx: int = 1
 
-
 func _ready():
 	if not vehicle_controller or sound_loops.size() < 2:
 		set_process(false)

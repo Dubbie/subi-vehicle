@@ -1,8 +1,108 @@
-[gd_scene load_steps=7 format=3 uid="uid://c1vabacdku00h"]
+[gd_scene load_steps=41 format=3 uid="uid://c1vabacdku00h"]
 
 [ext_resource type="PackedScene" uid="uid://bmrx0ppni2eb5" path="res://vehicles/_base/base_vehicle.tscn" id="1_2gvmu"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="2_8ub01"]
 [ext_resource type="PackedScene" uid="uid://cbrx5wbd4ld35" path="res://vehicles/chevrolet_ck/assets/ck.glb" id="2_gqip3"]
+[ext_resource type="Script" uid="uid://dkfcuqg8x6c6o" path="res://src/vehicle/engine_sound/engine_sound_loop.gd" id="2_yexvl"]
+[ext_resource type="AudioStream" uid="uid://w7k2qtl644wg" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_1000_off.wav" id="3_j6c73"]
+[ext_resource type="AudioStream" uid="uid://d4iipdp87ryw4" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_1000_on.wav" id="4_oxtur"]
+[ext_resource type="AudioStream" uid="uid://b15chmv6s6yuy" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_1500_off.wav" id="5_3yelo"]
+[ext_resource type="AudioStream" uid="uid://b2hpncpwn38fn" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_1500_on.wav" id="6_s52ji"]
+[ext_resource type="AudioStream" uid="uid://ciax65rf2ocog" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_2000_off.wav" id="7_rlola"]
+[ext_resource type="AudioStream" uid="uid://du17b47eiyg4" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_2000_on.wav" id="8_6ys54"]
+[ext_resource type="AudioStream" uid="uid://c1ebdj2t8uf7c" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_2500_off.wav" id="9_cuk34"]
+[ext_resource type="AudioStream" uid="uid://dgdt1uxc0emsl" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_2500_on.wav" id="10_23kt6"]
+[ext_resource type="AudioStream" uid="uid://2uihh4yvmuo3" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_3000_off.wav" id="11_qrxnb"]
+[ext_resource type="AudioStream" uid="uid://dw75ihaheu3lc" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_3000_on.wav" id="12_cnsdp"]
+[ext_resource type="AudioStream" uid="uid://dnift7jpi3x7u" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_3500_off.wav" id="13_v3vmv"]
+[ext_resource type="AudioStream" uid="uid://d1kecb2nd8vrj" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_3500_on.wav" id="14_34ar7"]
+[ext_resource type="AudioStream" uid="uid://dai0snb6rspul" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_4000_off.wav" id="15_sr158"]
+[ext_resource type="AudioStream" uid="uid://bjb4tauukhbx3" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_4000_on.wav" id="16_ipwsh"]
+[ext_resource type="AudioStream" uid="uid://cpwbilmr7d440" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_4500_off.wav" id="17_fah2q"]
+[ext_resource type="AudioStream" uid="uid://bvhq0uml8k8qc" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_4500_on.wav" id="18_418uy"]
+[ext_resource type="AudioStream" uid="uid://b8t2jy8njibxb" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_5000_off.wav" id="19_qkdjb"]
+[ext_resource type="AudioStream" uid="uid://dew01e3frcook" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_5000_on.wav" id="20_2qgmo"]
+[ext_resource type="AudioStream" uid="uid://demk750yi2oxv" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_5500_off.wav" id="21_jafv6"]
+[ext_resource type="AudioStream" uid="uid://00a7fd27v2yn" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_5500_on.wav" id="22_4sojw"]
+[ext_resource type="AudioStream" uid="uid://c41e84qkfvsav" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_6000_off.wav" id="23_o6ttm"]
+[ext_resource type="AudioStream" uid="uid://bx8qedsjwlgnx" path="res://vehicles/corvette_c5/assets/engine_sound/corvette_6500_on.wav" id="24_v2h2d"]
+
+[sub_resource type="Resource" id="Resource_4vuw8"]
+script = ExtResource("2_yexvl")
+rpm = 1000
+on_throttle_sound = ExtResource("4_oxtur")
+off_throttle_sound = ExtResource("3_j6c73")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_ley3i"]
+script = ExtResource("2_yexvl")
+rpm = 1500
+on_throttle_sound = ExtResource("6_s52ji")
+off_throttle_sound = ExtResource("5_3yelo")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_kucqc"]
+script = ExtResource("2_yexvl")
+rpm = 2000
+on_throttle_sound = ExtResource("8_6ys54")
+off_throttle_sound = ExtResource("7_rlola")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_i180o"]
+script = ExtResource("2_yexvl")
+rpm = 2500
+on_throttle_sound = ExtResource("10_23kt6")
+off_throttle_sound = ExtResource("9_cuk34")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_w8lgf"]
+script = ExtResource("2_yexvl")
+rpm = 3000
+on_throttle_sound = ExtResource("12_cnsdp")
+off_throttle_sound = ExtResource("11_qrxnb")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_gnmeh"]
+script = ExtResource("2_yexvl")
+rpm = 3500
+on_throttle_sound = ExtResource("14_34ar7")
+off_throttle_sound = ExtResource("13_v3vmv")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_hxnwd"]
+script = ExtResource("2_yexvl")
+rpm = 4000
+on_throttle_sound = ExtResource("16_ipwsh")
+off_throttle_sound = ExtResource("15_sr158")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_5bvh0"]
+script = ExtResource("2_yexvl")
+rpm = 4500
+on_throttle_sound = ExtResource("18_418uy")
+off_throttle_sound = ExtResource("17_fah2q")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_pq2p7"]
+script = ExtResource("2_yexvl")
+rpm = 5000
+on_throttle_sound = ExtResource("20_2qgmo")
+off_throttle_sound = ExtResource("19_qkdjb")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_6jcw6"]
+script = ExtResource("2_yexvl")
+rpm = 5500
+on_throttle_sound = ExtResource("22_4sojw")
+off_throttle_sound = ExtResource("21_jafv6")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
+
+[sub_resource type="Resource" id="Resource_u83v6"]
+script = ExtResource("2_yexvl")
+rpm = 6000
+on_throttle_sound = ExtResource("24_v2h2d")
+off_throttle_sound = ExtResource("23_o6ttm")
+metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
 
 [sub_resource type="Curve" id="Curve_gqip3"]
 _limits = [0.0, 375.0, 0.0, 5500.0]
@@ -33,6 +133,9 @@ size = Vector3(1.5929, 1.2782, 5.34804)
 [node name="CarCK" instance=ExtResource("1_2gvmu")]
 mass = 1700.0
 center_of_mass = Vector3(0, 0.1, -0.17)
+
+[node name="BaseEngineController" parent="." index="0"]
+sound_loops = Array[ExtResource("2_yexvl")]([SubResource("Resource_4vuw8"), SubResource("Resource_ley3i"), SubResource("Resource_kucqc"), SubResource("Resource_i180o"), SubResource("Resource_w8lgf"), SubResource("Resource_gnmeh"), SubResource("Resource_hxnwd"), SubResource("Resource_5bvh0"), SubResource("Resource_pq2p7"), SubResource("Resource_6jcw6"), SubResource("Resource_u83v6")])
 
 [node name="DrivetrainController" parent="Components" index="2"]
 torque_curve = SubResource("Curve_gqip3")

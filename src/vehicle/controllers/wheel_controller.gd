@@ -2,9 +2,12 @@ class_name WheelController
 extends RayCast3D
 
 #region Axle Config
-var wheel_radius: float = 0.316 # meters
-var wheel_mass: float = 18.0 # kg
-var wheel_width: float = 0.18 # meters
+## How large the wheels are, required for inertia calculation
+var wheel_radius: float = 0.316
+## How heavy the wheels are, required for inertia calculation
+var wheel_mass: float = 18.0
+## The wheels width in meters
+var wheel_width: float = 0.18
 
 ## Spring force in Newtons per meter (N/m)
 var spring_stiffness: float = 25000.0
@@ -28,18 +31,26 @@ var toe_angle_deg: float = 0.0
 #endregion
 
 #region Internal
+## Shows debug information
 var debug_mode: bool = true
+## The spring's length the previous frame
 var last_spring_length: float = 0.0
 ## Positions the wheel visually
 var current_wheel_height: float = 0.0
 ## Spring compression ratio
 var compression_ratio: float = 0.0
+## Is the wheel on the ground
 var has_contact: bool = false
+## Inverse inertia calculation for wheel
 var inertia_inverse: float = 0.1
+## How much the wheel rotates
 var delta_rotation: float = 0.0
+## Is the wheel being driven, used in debug
 var driven_wheel: bool = false
+## The current steering angle
 var current_steer_angle: float = 0.0
 
+# Wheel basis vectors
 var knuckle_forward: Vector3 = Vector3.ZERO
 var knuckle_right: Vector3 = Vector3.ZERO
 var knuckle_up: Vector3 = Vector3.ZERO
@@ -52,7 +63,9 @@ var contact_velocity: Vector3 = Vector3.ZERO
 var contact_lat_velocity: float = 0.0
 var contact_lon_velocity: float = 0.0
 
+## Current angular velocity in radians per second
 var current_angular_velocity: float = 0.0
+## Current drive torque on the wheel, in N-m
 var drive_torque: float = 0.0
 
 # Slip for tire model

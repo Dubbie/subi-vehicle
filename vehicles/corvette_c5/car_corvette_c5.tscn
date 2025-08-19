@@ -149,8 +149,8 @@ metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 size = Vector3(1, 1.06067, 4.36755)
 
 [node name="CarCorvetteC5" instance=ExtResource("1_1a1te")]
+mass = 1400.0
 center_of_mass = Vector3(0, 0.1, 0)
-weight = 1415.0
 max_steer_angle = 32.0
 
 [node name="BaseEngineController" parent="." index="0"]
