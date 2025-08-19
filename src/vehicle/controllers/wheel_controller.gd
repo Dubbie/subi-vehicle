@@ -8,6 +8,8 @@ var wheel_radius: float = 0.316
 var wheel_mass: float = 18.0
 ## The wheels width in meters
 var wheel_width: float = 0.18
+## CRR - Coefficient of rolling resistance
+var crr: float = 0.015
 
 ## Spring force in Newtons per meter (N/m)
 var spring_stiffness: float = 25000.0
@@ -266,7 +268,6 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	var traction_torque = local_force.z * wheel_radius
 
 	# Rolling resistance always opposes rotation
-	var crr = 0.015
 	var rolling_resistance_force = crr * local_force.y
 	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
 
@@ -295,8 +296,10 @@ func apply_forces_to_rigidbody():
 		return
 
 	var total_friction_force = lat_force_vector + lon_force_vector
-	car.apply_force(load_force_vector, global_position - car.global_position)
-	car.apply_force(total_friction_force, contact_point - car.global_position)
+
+	var application_point: Vector3 = wheel_node.global_position - car.global_position
+	car.apply_force(load_force_vector, application_point)
+	car.apply_force(total_friction_force, application_point)
 
 #region Private methods
 func _update_knuckle(steer_angle: float) -> void:

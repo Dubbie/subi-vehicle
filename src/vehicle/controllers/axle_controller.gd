@@ -81,6 +81,8 @@ enum DifferentialType {
 @export var wheel_mass: float = 18.0 # kg
 ## Width of the wheels. Not used at the moment.
 @export var wheel_width: float = 0.3 # m
+## Coefficient of rolling resistance, produces negative torque on the wheels.
+@export var wheel_crr: float = 0.015
 ## The tire model to use for the wheels
 @export var tire_model: BaseTireModel
 ## The left wheel.
@@ -125,6 +127,7 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 		wheel.wheel_mass = wheel_mass
 		wheel.wheel_radius = wheel_radius
 		wheel.wheel_width = wheel_width
+		wheel.crr = wheel_crr
 
 		# Suspension Geometry
 		wheel.camber_angle_deg = camber_angle_deg

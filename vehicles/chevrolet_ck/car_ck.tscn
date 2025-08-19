@@ -1,4 +1,4 @@
-[gd_scene load_steps=41 format=3 uid="uid://c1vabacdku00h"]
+[gd_scene load_steps=42 format=3 uid="uid://c1vabacdku00h"]
 
 [ext_resource type="PackedScene" uid="uid://bmrx0ppni2eb5" path="res://vehicles/_base/base_vehicle.tscn" id="1_2gvmu"]
 [ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="2_8ub01"]
@@ -105,25 +105,43 @@ off_throttle_sound = ExtResource("23_o6ttm")
 metadata/_custom_type_script = "uid://dkfcuqg8x6c6o"
 
 [sub_resource type="Curve" id="Curve_gqip3"]
-_limits = [0.0, 375.0, 0.0, 5500.0]
-_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(800, 280), 0.130589, 0.130589, 0, 0, Vector2(1500, 360), 0.0544741, 0.0544741, 0, 0, Vector2(2000, 375), 0.0, 0.0, 0, 0, Vector2(3000, 350), -0.0392495, -0.0392495, 0, 0, Vector2(4000, 280), -0.087897, -0.087897, 0, 0, Vector2(4800, 210), -0.101194, 0.0, 0, 0, Vector2(5500, 0), 0.0, 0.0, 0, 0]
-point_count = 8
+_limits = [0.0, 318.0, 0.0, 4800.0]
+_data = [Vector2(0, 0), 0.0, 0.0029279, 0, 0, Vector2(700, 90), 0.140952, 0.140952, 0, 0, Vector2(2400, 318), -0.00293619, -0.00293619, 0, 0, Vector2(4000, 285), -0.056586, -0.056586, 0, 0, Vector2(4800, 240), -0.0515937, 0.130589, 0, 0]
+point_count = 5
 
-[sub_resource type="Resource" id="Resource_2jxh3"]
+[sub_resource type="Resource" id="Resource_yexvl"]
 script = ExtResource("2_8ub01")
-peak_longitudinal_mu = 0.85
+peak_longitudinal_mu = 1.0
 peak_lateral_mu = 0.8
-sliding_longitudinal_mu = 0.65
+sliding_longitudinal_mu = 0.75
 sliding_lateral_mu = 0.6
-peak_lon_slip_ratio = 0.14
-peak_lat_slip_angle_deg = 8.5
-lon_curve_sharpness = 1.2
-lat_curve_sharpness = 1.4
-optimal_load = 4500.0
-load_sensitivity = 0.4
-friction_circle_shape = 1.2
-combined_slip_falloff = 0.4
-relaxation_length = 0.18
+peak_lon_slip_ratio = 0.06
+peak_lat_slip_angle_deg = 7.0
+lon_curve_sharpness = 1.5
+lat_curve_sharpness = 2.0
+optimal_load = 4200.0
+load_sensitivity = 0.3
+friction_circle_shape = 1.1
+combined_slip_falloff = 0.5
+relaxation_length = 0.3
+min_relaxation_speed = 1.0
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
+
+[sub_resource type="Resource" id="Resource_j6c73"]
+script = ExtResource("2_8ub01")
+peak_longitudinal_mu = 1.05
+peak_lateral_mu = 0.9
+sliding_longitudinal_mu = 0.8
+sliding_lateral_mu = 0.65
+peak_lon_slip_ratio = 0.06
+peak_lat_slip_angle_deg = 7.0
+lon_curve_sharpness = 1.5
+lat_curve_sharpness = 2.0
+optimal_load = 4200.0
+load_sensitivity = 0.3
+friction_circle_shape = 1.1
+combined_slip_falloff = 0.5
+relaxation_length = 0.3
 min_relaxation_speed = 1.0
 metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 
@@ -135,27 +153,28 @@ mass = 1700.0
 center_of_mass = Vector3(0, 0.1, -0.17)
 
 [node name="BaseEngineController" parent="." index="0"]
-vehicle_max_rpm = 5500.0
+vehicle_max_rpm = 4800.0
 sound_loops = Array[ExtResource("2_yexvl")]([SubResource("Resource_4vuw8"), SubResource("Resource_ley3i"), SubResource("Resource_kucqc"), SubResource("Resource_i180o"), SubResource("Resource_w8lgf"), SubResource("Resource_gnmeh"), SubResource("Resource_hxnwd"), SubResource("Resource_5bvh0"), SubResource("Resource_pq2p7"), SubResource("Resource_6jcw6"), SubResource("Resource_u83v6")])
 
 [node name="DrivetrainController" parent="Components" index="2"]
 torque_curve = SubResource("Curve_gqip3")
 engine_inertia = 0.4
 engine_brake_torque = 40.0
-engine_friction_coefficient = 0.007
-engine_min_rpm = 850.0
+engine_friction_coefficient = 0.005
+engine_min_rpm = 700.0
 engine_max_rpm = 4800.0
-gear_ratios = Array[float]([-2.29, 0.0, 3.06, 1.63, 1.0, 0.7])
+gear_ratios = Array[float]([-3.35, 0.0, 3.35, 1.99, 1.33, 1.0, 0.68])
 upshift_rpm = 4200.0
 downshift_rpm = 2000.0
 shift_delay = 0.4
-clutch_torque_capacity = 400.0
-static_friction_multiplier = 1.2
-lockup_slip_threshold = 100.0
-clutch_heat_capacity = 700.0
-clutch_cooling_rate = 0.5
-fade_start_temperature = 220.0
-fade_complete_temperature = 380.0
+clutch_torque_capacity = 360.0
+auto_clutch_enabled = true
+
+[node name="AeroController" parent="Components" index="3"]
+frontal_area = 2.5
+drag_coefficient = 0.0
+lift_coefficient = 0.0
+yaw_stability_factor = 0.08
 
 [node name="ECUController" parent="Components" index="4"]
 rev_limit_rpm = 4800.0
@@ -174,30 +193,31 @@ anti_roll_stiffness = 9500.0
 camber_angle_deg = 0.5
 caster_angle_deg = 2.5
 toe_angle_deg = 0.1
-wheel_radius = 0.367
+wheel_radius = 0.37
 wheel_mass = 28.0
 wheel_width = 0.235
-tire_model = SubResource("Resource_2jxh3")
+wheel_crr = 0.009
+tire_model = SubResource("Resource_yexvl")
 
 [node name="WheelFL" parent="Axles/FrontAxle" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.836, 0, 0)
 
 [node name="CSGCylinder3D" parent="Axles/FrontAxle/WheelFL/Animation/Camber/Wheel" index="0"]
-radius = 0.367
+radius = 0.37
 height = 0.235
 
 [node name="WheelFR" parent="Axles/FrontAxle" index="1"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.836, 0, 0)
 
 [node name="CSGCylinder3D" parent="Axles/FrontAxle/WheelFR/Animation/Camber/Wheel" index="0"]
-radius = 0.367
+radius = 0.37
 height = 0.235
 
 [node name="RearAxle" parent="Axles" index="1"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.67)
 z_offset = 1.67
 track_width = 1.64
-diff_ratio = 3.42
+diff_ratio = 3.08
 max_spring_length = 0.4
 spring_stiffness = 60000.0
 spring_bump_damping = 3000.0
@@ -207,30 +227,34 @@ camber_angle_deg = 0.0
 toe_angle_deg = 0.0
 is_solid_axle = true
 differential_type = 0
-wheel_radius = 0.367
+wheel_radius = 0.37
 wheel_mass = 28.0
 wheel_width = 0.235
-tire_model = SubResource("Resource_2jxh3")
+wheel_crr = 0.009
+tire_model = SubResource("Resource_j6c73")
 
 [node name="WheelRL" parent="Axles/RearAxle" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.82, 0, 0)
 
 [node name="CSGCylinder3D" parent="Axles/RearAxle/WheelRL/Animation/Camber/Wheel" index="0"]
-radius = 0.367
+radius = 0.37
 height = 0.235
 
 [node name="WheelRR" parent="Axles/RearAxle" index="1"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.82, 0, 0)
 
 [node name="CSGCylinder3D" parent="Axles/RearAxle/WheelRR/Animation/Camber/Wheel" index="0"]
-radius = 0.367
+radius = 0.37
 height = 0.235
+
+[node name="AeroCenterPoint" parent="." index="3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -0.36)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." index="4"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0165405, 0.616272, 0.325554)
 shape = SubResource("BoxShape3D_gqip3")
 
-[node name="ck" parent="." index="6" instance=ExtResource("2_gqip3")]
+[node name="ck" parent="." index="5" instance=ExtResource("2_gqip3")]
 transform = Transform3D(-1.58, 0, 2.38573e-07, 0, 1.58, 0, -2.38573e-07, 0, -1.58, 0, -0.44714, -2.46305)
 
 [editable path="Axles/FrontAxle/WheelFL"]
