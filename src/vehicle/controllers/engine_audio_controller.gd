@@ -1,9 +1,18 @@
 class_name EngineSoundController
 extends Node3D
 
+## The vehicle controller to which this controller is attached.
 @export var vehicle_controller: VehicleController
+## The minimum pitch of the sound.
 @export var min_pitch: float = 0.5
+## The maximum pitch of the sound.
 @export var max_pitch: float = 1.5
+
+## The vehicle's actual maximum engine RPM. This is used to scale the sound.
+@export var vehicle_max_rpm: float = 8000.0
+## The maximum RPM of the provided engine sound recordings.
+## If set to 0, it will be auto-detected from the sound_loops array.
+@export var sounds_max_rpm: float = 0.0
 
 # In the inspector, you will create and assign EngineSoundLoop resources here.
 @export var sound_loops: Array[EngineSoundLoop] = []
@@ -19,6 +28,7 @@ var _on_players: Array[AudioStreamPlayer3D]
 var _off_players: Array[AudioStreamPlayer3D]
 var _lower_loop_idx: int = 0
 var _upper_loop_idx: int = 1
+var _rpm_scale_factor: float = 1.0
 
 func _ready():
 	if not vehicle_controller or sound_loops.size() < 2:
@@ -26,6 +36,13 @@ func _ready():
 		return
 
 	sound_loops.sort_custom(func(a, b): return a.rpm < b.rpm)
+
+	var recorded_max_rpm = sounds_max_rpm
+	if recorded_max_rpm <= 0:
+		recorded_max_rpm = sound_loops.back().rpm
+
+	if vehicle_max_rpm > 0 and recorded_max_rpm > 0:
+		_rpm_scale_factor = recorded_max_rpm / vehicle_max_rpm
 
 	# Initial player setup
 	_on_players = [on_player_a, on_player_b]
@@ -48,11 +65,10 @@ func _process(_delta):
 
 	var current_rpm: float = vehicle_controller.get_engine_rpm()
 	var throttle_input: float = vehicle_controller.pedal_controller.get_throttle()
-
-	update_engine_sound(current_rpm, throttle_input)
+	var scaled_rpm = current_rpm * _rpm_scale_factor
+	update_engine_sound(scaled_rpm, throttle_input)
 
 func update_engine_sound(rpm: float, throttle: float) -> void:
-	# --- NEW STATE MANAGEMENT LOGIC ---
 	# Check if the RPM has crossed a boundary, requiring us to change loops
 	if rpm < sound_loops[_lower_loop_idx].rpm and _lower_loop_idx > 0:
 		# RPM decreased, we need to shift our loops down
@@ -77,8 +93,6 @@ func update_engine_sound(rpm: float, throttle: float) -> void:
 		_off_players.reverse()
 		_on_players[1].stream = sound_loops[_upper_loop_idx].on_throttle_sound
 		_off_players[1].stream = sound_loops[_upper_loop_idx].off_throttle_sound
-
-	# --- END OF NEW LOGIC ---
 
 	# The rest of the logic remains the same, but uses our state variables
 	var lower_loop = sound_loops[_lower_loop_idx]

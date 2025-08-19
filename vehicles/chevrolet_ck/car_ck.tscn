@@ -135,6 +135,7 @@ mass = 1700.0
 center_of_mass = Vector3(0, 0.1, -0.17)
 
 [node name="BaseEngineController" parent="." index="0"]
+vehicle_max_rpm = 5500.0
 sound_loops = Array[ExtResource("2_yexvl")]([SubResource("Resource_4vuw8"), SubResource("Resource_ley3i"), SubResource("Resource_kucqc"), SubResource("Resource_i180o"), SubResource("Resource_w8lgf"), SubResource("Resource_gnmeh"), SubResource("Resource_hxnwd"), SubResource("Resource_5bvh0"), SubResource("Resource_pq2p7"), SubResource("Resource_6jcw6"), SubResource("Resource_u83v6")])
 
 [node name="DrivetrainController" parent="Components" index="2"]
