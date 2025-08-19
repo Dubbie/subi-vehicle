@@ -52,6 +52,9 @@ size = Vector3(1.543, 1.07327, 4.48376)
 mass = 1393.0
 center_of_mass = Vector3(0, 0.16, -0.07)
 
+[node name="SteeringController" parent="Components" index="1"]
+grip_limit_smoothing_rate = 2.0
+
 [node name="DrivetrainController" parent="Components" index="2"]
 torque_curve = SubResource("Curve_jnv4a")
 engine_max_rpm = 6200.0
@@ -63,6 +66,7 @@ auto_clutch_enabled = true
 
 [node name="AeroController" parent="Components" index="3"]
 frontal_area = 2.05
+lift_coefficient = 0.04
 
 [node name="FrontAxle" parent="Axles" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.325)
