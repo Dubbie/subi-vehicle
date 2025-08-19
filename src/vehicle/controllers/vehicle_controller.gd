@@ -12,7 +12,6 @@ extends RigidBody3D
 @export var ecu_controller: ECUController
 
 @export_group("Vehicle Configuration")
-@export var weight: float = 1250.0
 @export var axles: Array[AxleController] = []
 @export var max_steer_angle: float = 38.0
 ## Damping force applied to driven axles at very low speed to prevent oscillation.
@@ -47,8 +46,6 @@ var current_engine_rpm: float = 0.0
 @onready var engine_label: Label = %EngineLabel
 
 func _ready():
-	mass = weight
-
 	# Validate required components
 	if not drivetrain_controller:
 		push_error("DrivetrainController is required but not assigned.")
@@ -103,8 +100,8 @@ func _physics_process(delta: float):
 		if i == 0:
 			axle.set_steer_value(steering_controller.get_steer_value())
 
-		# Call the renamed function to update suspension, ARBs, etc.
-		axle.update_axle_and_wheel_states(delta)
+		# Update suspension
+		axle.update_axle_and_wheel_states()
 
 		# Check ground contact
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
@@ -393,6 +390,9 @@ func _on_clutch_overheated() -> void:
 #endregion
 
 #region Public API
+func get_point_velocity(point: Vector3) -> Vector3:
+	return linear_velocity + angular_velocity.cross(point - global_position)
+
 func get_engine_rpm() -> float:
 	return drivetrain_controller.get_engine_rpm()
 

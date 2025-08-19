@@ -31,7 +31,8 @@ metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
 size = Vector3(1.5929, 1.2782, 5.34804)
 
 [node name="CarCK" instance=ExtResource("1_2gvmu")]
-weight = 1505.0
+mass = 1700.0
+center_of_mass = Vector3(0, 0.1, -0.17)
 
 [node name="DrivetrainController" parent="Components" index="2"]
 torque_curve = SubResource("Curve_gqip3")
@@ -60,10 +61,11 @@ rev_resume_rpm = 4600.0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.67)
 z_offset = -1.67
 track_width = 1.672
-max_spring_length = 0.23
-spring_stiffness = 35000.0
-spring_bump_damping = 2500.0
-spring_rebound_damping = 45000.0
+max_spring_length = 0.45
+spring_stiffness = 32000.0
+spring_bump_damping = 3200.0
+spring_rebound_damping = 8000.0
+ride_height_adjust = 0.01
 anti_roll_stiffness = 9500.0
 camber_angle_deg = 0.5
 caster_angle_deg = 2.5
@@ -92,7 +94,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.67)
 z_offset = 1.67
 track_width = 1.64
 diff_ratio = 3.42
-max_spring_length = 0.25
+max_spring_length = 0.4
 spring_stiffness = 60000.0
 spring_bump_damping = 3000.0
 spring_rebound_damping = 5500.0

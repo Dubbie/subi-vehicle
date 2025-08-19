@@ -37,6 +37,8 @@ enum DifferentialType {
 @export var spring_bump_damping: float = 1350.0 # Ns/m
 ## Damping of the suspension spring when extending.
 @export var spring_rebound_damping: float = 3375.0 # Ns/m
+## Adjusts the ride height by preloading the spring.
+@export var ride_height_adjust: float = 0.0
 ## The stiffness of the anti-roll bar. Only used for independent suspension.
 ## A higher value reduces body roll. Set to 0 to disable.
 @export var anti_roll_stiffness: float = 8000.0 # N/m
@@ -113,10 +115,11 @@ func initialize(p_wheelbase: float, p_max_steer_angle_deg: float) -> void:
 		wheel.tire_model = tire_model.duplicate(true)
 
 		# Suspension
-		wheel.suspension_stiffness = spring_stiffness
-		wheel.suspension_bump_damping = spring_bump_damping
-		wheel.suspension_rebound_damping = spring_rebound_damping
-		wheel.suspension_max_length = max_spring_length
+		wheel.spring_stiffness = spring_stiffness
+		wheel.spring_bump_damping = spring_bump_damping
+		wheel.spring_rebound_damping = spring_rebound_damping
+		wheel.spring_max_travel = max_spring_length
+		wheel.ride_height_adjust = ride_height_adjust
 
 		# Wheel properties
 		wheel.wheel_mass = wheel_mass
@@ -172,7 +175,7 @@ func set_steer_value(steer_value: float) -> void:
 		steer_angle_left = - current_angle_outer_deg
 		steer_angle_right = - current_angle_inner_deg
 
-func update_axle_and_wheel_states(delta: float) -> void:
+func update_axle_and_wheel_states() -> void:
 	# Guard against running physics in the editor, which causes errors.
 	if Engine.is_editor_hint():
 		return
@@ -188,13 +191,8 @@ func update_axle_and_wheel_states(delta: float) -> void:
 	# --- Wheel State Update ---
 	# Now that the geometry and extra forces are set, we tell each wheel to
 	# update its own state based on its (potentially new) position.
-	left_wheel.update_state(steer_angle_left, delta)
-	right_wheel.update_state(steer_angle_right, delta)
-
-func update_wheel_states(delta: float) -> void:
-	left_wheel.update_state(steer_angle_left, delta)
-	right_wheel.update_state(steer_angle_right, delta)
-
+	left_wheel.update_state(steer_angle_left)
+	right_wheel.update_state(steer_angle_right)
 
 func get_distributed_torques(total_axle_torque: float) -> Vector2:
 	# 1. Start with a basic 50/50 open differential split.
@@ -253,64 +251,54 @@ func _set_track_width(new_value: float) -> void:
 			right_wheel.position.x = half_track
 
 func _update_solid_axle_geometry():
-	# Instead of directly positioning wheels, we enforce the solid axle constraint
-	# by averaging the suspension forces and heights, then applying corrective forces
-	if not (left_wheel.has_contact or right_wheel.has_contact):
-		return
-
-	# Calculate the average suspension compression to determine beam height
-	var left_compression = left_wheel.suspension_max_length - left_wheel.current_spring_length
-	var right_compression = right_wheel.suspension_max_length - right_wheel.current_spring_length
-	var avg_compression = (left_compression + right_compression) * 0.5
-
-	# Calculate the beam tilt angle based on compression difference
-	var compression_diff = right_compression - left_compression
-	var beam_tilt_angle = atan2(compression_diff, track_width)
-
-	# Limit the tilt angle to prevent extreme angles
-	beam_tilt_angle = clamp(beam_tilt_angle, deg_to_rad(-15.0), deg_to_rad(15.0))
-
-	# Calculate target spring lengths based on beam tilt
-	var half_track = track_width * 0.5
-	var left_target_compression = avg_compression - half_track * tan(beam_tilt_angle)
-	var right_target_compression = avg_compression + half_track * tan(beam_tilt_angle)
-
-	# Convert back to spring lengths
-	var left_target_length = left_wheel.suspension_max_length - left_target_compression
-	var right_target_length = right_wheel.suspension_max_length - right_target_compression
-
-	# Apply corrective forces to enforce the beam constraint
-	var beam_stiffness = spring_stiffness * 2.0 # Stiffer than individual springs
-
-	# For very stiff beams, you might want to add an export variable:
-	# @export var beam_stiffness_multiplier: float = 2.0
-	# var beam_stiffness = spring_stiffness * beam_stiffness_multiplier
-
-	# Calculate corrective forces
-	var left_correction = (left_target_length - left_wheel.current_spring_length) * beam_stiffness
-	var right_correction = (right_target_length - right_wheel.current_spring_length) * beam_stiffness
-
-	# Apply the corrections as additional forces
-	left_wheel.anti_roll_force += left_correction
-	right_wheel.anti_roll_force += right_correction
-
-	# Optional: Add some damping to prevent oscillations
-	var beam_damping = spring_bump_damping * 0.5
-	var left_velocity = (left_wheel.current_spring_length - left_wheel.last_spring_length) / get_physics_process_delta_time()
-	var right_velocity = (right_wheel.current_spring_length - right_wheel.last_spring_length) / get_physics_process_delta_time()
-
-	var velocity_diff = right_velocity - left_velocity
-	var damping_force = velocity_diff * beam_damping
-
-	left_wheel.anti_roll_force += damping_force * 0.5
-	right_wheel.anti_roll_force -= damping_force * 0.5
+	## TODO: Implement solid axle logic
+	# # Instead of directly positioning wheels, we enforce the solid axle constraint
+	# # by averaging the suspension forces and heights, then applying corrective forces
+	# if not (left_wheel.has_contact or right_wheel.has_contact):
+	# 	return
+	# # Calculate the average suspension compression to determine beam height
+	# var left_compression = left_wheel.suspension_max_length - left_wheel.current_spring_length
+	# var right_compression = right_wheel.suspension_max_length - right_wheel.current_spring_length
+	# var avg_compression = (left_compression + right_compression) * 0.5
+	# # Calculate the beam tilt angle based on compression difference
+	# var compression_diff = right_compression - left_compression
+	# var beam_tilt_angle = atan2(compression_diff, track_width)
+	# # Limit the tilt angle to prevent extreme angles
+	# beam_tilt_angle = clamp(beam_tilt_angle, deg_to_rad(-15.0), deg_to_rad(15.0))
+	# # Calculate target spring lengths based on beam tilt
+	# var half_track = track_width * 0.5
+	# var left_target_compression = avg_compression - half_track * tan(beam_tilt_angle)
+	# var right_target_compression = avg_compression + half_track * tan(beam_tilt_angle)
+	# # Convert back to spring lengths
+	# var left_target_length = left_wheel.suspension_max_length - left_target_compression
+	# var right_target_length = right_wheel.suspension_max_length - right_target_compression
+	# # Apply corrective forces to enforce the beam constraint
+	# var beam_stiffness = spring_stiffness * 2.0 # Stiffer than individual springs
+	# # For very stiff beams, you might want to add an export variable:
+	# # @export var beam_stiffness_multiplier: float = 2.0
+	# # var beam_stiffness = spring_stiffness * beam_stiffness_multiplier
+	# # Calculate corrective forces
+	# var left_correction = (left_target_length - left_wheel.current_spring_length) * beam_stiffness
+	# var right_correction = (right_target_length - right_wheel.current_spring_length) * beam_stiffness
+	# # Apply the corrections as additional forces
+	# left_wheel.anti_roll_force += left_correction
+	# right_wheel.anti_roll_force += right_correction
+	# # Optional: Add some damping to prevent oscillations
+	# var beam_damping = spring_bump_damping * 0.5
+	# var left_velocity = (left_wheel.current_spring_length - left_wheel.last_spring_length) / get_physics_process_delta_time()
+	# var right_velocity = (right_wheel.current_spring_length - right_wheel.last_spring_length) / get_physics_process_delta_time()
+	# var velocity_diff = right_velocity - left_velocity
+	# var damping_force = velocity_diff * beam_damping
+	# left_wheel.anti_roll_force += damping_force * 0.5
+	# right_wheel.anti_roll_force -= damping_force * 0.5
+	pass
 
 func _update_independent_suspension_forces():
 	# This logic is for the anti-roll bar on independent suspensions. It remains the same.
 	var arb_force: float = 0.0
 	if anti_roll_stiffness > 0.0:
-		var compression_diff = left_wheel.current_spring_length - right_wheel.current_spring_length
+		var compression_diff = left_wheel.compression_ratio - right_wheel.compression_ratio
 		arb_force = compression_diff * anti_roll_stiffness
 
-	left_wheel.anti_roll_force = - arb_force
-	right_wheel.anti_roll_force = arb_force
+	left_wheel.anti_roll_force = arb_force
+	right_wheel.anti_roll_force = - arb_force

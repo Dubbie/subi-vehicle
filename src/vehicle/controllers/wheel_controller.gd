@@ -6,10 +6,18 @@ var wheel_radius: float = 0.316 # meters
 var wheel_mass: float = 18.0 # kg
 var wheel_width: float = 0.18 # meters
 
-var suspension_stiffness: float = 25000.0 # Spring force in Newtons per meter (N/m)
-var suspension_bump_damping: float = 1350.0
-var suspension_rebound_damping: float = 3350.0
-var suspension_max_length: float = 0.18 # Max travel distance in meters
+## Spring force in Newtons per meter (N/m)
+var spring_stiffness: float = 25000.0
+## Damping force in Newtons per meter (N/m)
+var spring_bump_damping: float = 1350.0
+## Damping force in Newtons per meter (N/m)
+var spring_rebound_damping: float = 3350.0
+## Max travel distance in meters
+var spring_max_travel: float = 0.18
+## Spring preload simulation
+var ride_height_adjust: float = 0.0
+## > 0 makes wheels stick to the ground better but is unrealistic
+var droop_extension: float = 0.0
 
 var tire_model: BaseTireModel
 
@@ -22,7 +30,10 @@ var toe_angle_deg: float = 0.0
 #region Internal
 var debug_mode: bool = true
 var last_spring_length: float = 0.0
-var current_spring_length: float = 0.0
+## Positions the wheel visually
+var current_wheel_height: float = 0.0
+## Spring compression ratio
+var compression_ratio: float = 0.0
 var has_contact: bool = false
 var inertia_inverse: float = 0.1
 var delta_rotation: float = 0.0
@@ -65,9 +76,8 @@ var lat_force_vector: Vector3 = Vector3.ZERO
 @onready var wheel_node: Marker3D = $Animation/Camber/Wheel
 
 func _ready() -> void:
-	target_position = Vector3.DOWN * (suspension_max_length + wheel_radius)
-	current_spring_length = suspension_max_length
-	last_spring_length = suspension_max_length
+	target_position.y = - (spring_max_travel + wheel_radius + droop_extension)
+	last_spring_length = spring_max_travel
 
 	var inertia = 0.5 * wheel_mass * wheel_radius * wheel_radius
 	if inertia > 0.0:
@@ -81,7 +91,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	# Update wheel visuals using the node hierarchy (Animation -> Camber -> Wheel)
 	# Suspension travel - animation node moves up/down
-	animation_node.position.y = - current_spring_length
+	wheel_node.position.y = current_wheel_height
 
 	# Caster and steering - caster tilts the steering axis
 	# This creates realistic camber change when steering
@@ -112,7 +122,7 @@ func _process(_delta: float) -> void:
 	if has_contact:
 		var text_position = global_position + Vector3.UP * 3.0
 		var slip_text = "Lon Slip: %.2f\nLat Slip: %.2f\n" % [lon_slip, lat_slip]
-		var load_text = "Load: %.d N\n" % [local_force.y]
+		var load_text = "%d N | %.2f%%" % [local_force.y, compression_ratio * 100.0]
 		DebugDraw3D.draw_text(text_position, slip_text + load_text, 32)
 
 	if Input.is_action_just_pressed("debug_load"):
@@ -120,10 +130,9 @@ func _process(_delta: float) -> void:
 
 func debug_suspension_forces():
 	print("=== SUSPENSION DEBUG for %s ===" % name)
-	print("Spring length: %.3f / %.3f" % [current_spring_length, suspension_max_length])
-	print("Compression: %.3f" % [suspension_max_length - current_spring_length])
-	print("Spring force: %.0f N" % [suspension_stiffness * (suspension_max_length - current_spring_length)])
-	print("Vertical load: %.0f N" % [local_force.y])
+	print("Compression Ratio: %.2f" % compression_ratio)
+	print("Vertical load: %.2f N" % [local_force.y])
+	print("Current Spring Length: %.3f N" % (spring_max_travel - (compression_ratio * spring_max_travel)))
 	print("Has contact: %s" % has_contact)
 	print("Anti-roll force: %.0f N" % anti_roll_force)
 	print("=============================")
@@ -165,51 +174,49 @@ func debug_tire_forces(current_drive_torque: float):
 	print("=====================================")
 
 #region Public methods
-func update_state(p_steer_angle: float, delta: float) -> void:
-	_update_spring_and_contact(delta)
+func update_state(p_steer_angle: float) -> void:
+	_update_spring_and_contact()
 	_update_knuckle(p_steer_angle)
 	_update_contact_velocities()
 
-func _update_spring_and_contact(delta: float) -> void:
+func _update_spring_and_contact() -> void:
 	force_raycast_update()
 	has_contact = is_colliding()
+	target_position.y = - (spring_max_travel + wheel_radius + droop_extension)
 
 	if has_contact:
 		contact_point = get_collision_point()
 		contact_normal = get_collision_normal()
-		var ray_length = global_position.distance_to(get_collision_point())
-		current_spring_length = ray_length - wheel_radius
-		current_spring_length = clamp(current_spring_length, 0.0, suspension_max_length)
+
+		var ground_contact_point: Vector3 = get_collision_point()
+		var current_spring_length: float = global_position.distance_to(ground_contact_point) - wheel_radius
+		var spring_compression: float = (spring_max_travel - current_spring_length) + ride_height_adjust
+		spring_compression = max(0.0, spring_compression)
+
+		var physical_compression = spring_max_travel - current_spring_length
+		compression_ratio = clamp(physical_compression / spring_max_travel, 0.0, 1.0)
+		current_wheel_height = - current_spring_length
+
+		var spring_force: float = spring_stiffness * spring_compression
+		var tire_contact_velocity: Vector3 = car.get_point_velocity(contact_point)
+		var suspension_relative_velocity: float = global_basis.y.dot(tire_contact_velocity)
+		var damping_force: float = spring_bump_damping * suspension_relative_velocity if suspension_relative_velocity > 0 else spring_rebound_damping * suspension_relative_velocity
+
+		var total_vertical_force: float = spring_force - damping_force + anti_roll_force
+
+		load_force_vector = total_vertical_force * contact_normal
+		local_force.y = total_vertical_force
+
+		last_spring_length = current_spring_length
 	else:
 		contact_point = Vector3.ZERO
 		contact_normal = Vector3.UP
-		current_spring_length = suspension_max_length
 
-	var compression_distance = suspension_max_length - current_spring_length
-	var spring_force = suspension_stiffness * compression_distance
+		current_wheel_height = - spring_max_travel
+		compression_ratio = 0.0
+		load_force_vector = Vector3.ZERO
 
-	var spring_velocity = (current_spring_length - last_spring_length) / delta
-
-	var damper_force: float
-	if spring_velocity < 0.0: # Compressing (bump)
-		damper_force = - suspension_bump_damping * spring_velocity
-	else: # Extending (rebound)
-		damper_force = - suspension_rebound_damping * spring_velocity
-
-	# Total suspension force now correctly includes the anti-roll bar force
-	var total_suspension_force = spring_force + damper_force + anti_roll_force
-
-	if has_contact:
-		total_suspension_force = max(0.0, total_suspension_force)
-		local_force.y = total_suspension_force
-		load_force_vector = total_suspension_force * contact_normal
-	else:
-		var max_pull_force = suspension_stiffness * 0.1
-		total_suspension_force = max(-max_pull_force, total_suspension_force)
-		local_force.y = total_suspension_force
-		load_force_vector = total_suspension_force * global_transform.basis.y
-
-	last_spring_length = current_spring_length
+		last_spring_length = spring_max_travel
 
 func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: float, dyn_muk: float, delta: float):
 	# Store drive torque from axle (can be positive or negative)

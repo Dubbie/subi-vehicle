@@ -45,14 +45,14 @@ transform = Transform3D(0.612372, -0.158494, -0.774519, 0.612372, -0.524519, 0.5
 shadow_enabled = true
 
 [node name="ChaseCamera" parent="." node_paths=PackedStringArray("target") instance=ExtResource("3_wu8pm")]
-target = NodePath("../CarCK")
+target = NodePath("../CarE30")
 rotation_speed = 24.0
 distance = 7.0
 height = 2.5
 
 [node name="CarE30" parent="." instance=ExtResource("5_g311c")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.7245, 0.688366, 0)
+is_controlled = true
 
 [node name="CarCK" parent="." instance=ExtResource("4_x06f6")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.71534, 0)
-is_controlled = true
