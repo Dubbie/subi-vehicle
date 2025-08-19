@@ -4,9 +4,9 @@ extends Node
 #region Configuration
 @export_group("Input Rates")
 ## How quickly the steering moves towards the player's input.
-@export var steer_rate: float = 3.0
+@export var steer_rate: float = 5.0
 ## How quickly the steering returns to center when there is no input.
-@export var center_rate: float = 6.0
+@export var center_rate: float = 12.0
 
 @export_group("Grip-Aware Steering")
 ## Enable grip-aware steering limitation
@@ -120,7 +120,7 @@ func _apply_grip_aware_limiting(raw_input: float, delta: float) -> float:
 
 	# If counter-steering, allow more aggressive input but still some limiting
 	if is_counter_steering:
-		var counter_steer_multiplier = 1.2 # Allow 20% more steering when counter-steering
+		var counter_steer_multiplier = 1.5 # Allow 20% more steering when counter-steering
 		return clamp(raw_input * counter_steer_multiplier, -1.0, 1.0)
 
 	# Calculate grip-based steering limit
@@ -181,14 +181,12 @@ func _detect_counter_steering(current_input: float) -> bool:
 	if abs(smoothed_front_slip_angle) < 2.0 or abs(current_input) < counter_steer_sensitivity:
 		return false
 
-	# --- FIX: Use the smoothed, signed slip angle calculated in the analysis step ---
 	# A positive slip angle means the front is sliding right.
 	# A positive input means steering right.
 	var slip_direction = sign(smoothed_front_slip_angle)
 	var input_direction = sign(current_input)
 
-	# --- FIX: Counter-steering is when you steer IN THE SAME DIRECTION as the slide ---
-	var is_correcting = (slip_direction != 0 and slip_direction == input_direction)
+	var is_correcting = (slip_direction != 0 and slip_direction != input_direction)
 
 	return is_correcting
 

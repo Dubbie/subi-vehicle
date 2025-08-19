@@ -144,9 +144,8 @@ func _calculate_longitudinal_force(slip_ratio: float, p_load: float, peak_mu: fl
 
 	if normalized_slip <= 1.0:
 		# Build-up to peak - smooth S-curve
-		#var x = normalized_slip
-		# force_coefficient = peak_mu * x * (2.0 - x * (1.0 - 0.3 / lon_curve_sharpness))
-		force_coefficient = peak_mu * sin(normalized_slip * PI / 2.0)
+		var x = normalized_slip
+		force_coefficient = peak_mu * x * (2.0 - x * (1.0 - 0.3 / lon_curve_sharpness))
 	else:
 		# Post-peak sliding region
 		var excess_slip = normalized_slip - 1.0
