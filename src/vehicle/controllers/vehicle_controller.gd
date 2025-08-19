@@ -301,14 +301,10 @@ func _update_debug_display():
 	text_parts.append("RPM: %.0f" % engine_info.rpm)
 	text_parts.append("Torque: %.1f Nm (%.1f%%)" % [engine_info.torque, engine_info.load_percent])
 
-	# Engine status
-	if engine_info.is_idle:
-		text_parts.append("[IDLE]")
-	if engine_info.is_redline:
-		text_parts.append("[REDLINE]")
-
 	# Clutch information
 	text_parts.append("Clutch: %.1f%% (%.1f Nm)" % [clutch_info.engagement_percent, clutch_info.torque])
+	text_parts.append("Locked: %s" % ("YES" if clutch_info.locked else "NO"))
+	text_parts.append("Corrective Torque: %.1f Nm" % clutch_info.corrective_torque)
 	text_parts.append("Slip: %.0f RPM" % clutch_info.slip_rpm)
 	text_parts.append("Temp: %.0f°C" % clutch_info.temperature)
 

@@ -1,0 +1,143 @@
+[gd_scene load_steps=8 format=3 uid="uid://j20i3k202gkj"]
+
+[ext_resource type="PackedScene" uid="uid://bmrx0ppni2eb5" path="res://vehicles/_base/base_vehicle.tscn" id="1_jnv4a"]
+[ext_resource type="PackedScene" uid="uid://843escqr6dij" path="res://vehicles/volvo_240_estate/assets/240_estate.glb" id="2_esffl"]
+[ext_resource type="Script" uid="uid://hgrcvwrnhy3a" path="res://src/vehicle/tire_models/brush_tire_model.gd" id="2_m2q8i"]
+
+[sub_resource type="Curve" id="Curve_jnv4a"]
+_limits = [0.0, 185.0, 0.0, 6200.0]
+_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(800, 70), 0.0796988, 0.0796988, 0, 0, Vector2(2500, 185), 0.0, 0.0, 0, 0, Vector2(5400, 114), -0.0199923, -0.0199923, 0, 0, Vector2(6200, 100), 0.0, 0.0, 0, 0]
+point_count = 5
+
+[sub_resource type="Resource" id="Resource_xnbcl"]
+script = ExtResource("2_m2q8i")
+peak_longitudinal_mu = 1.15
+peak_lateral_mu = 1.05
+sliding_longitudinal_mu = 0.75
+sliding_lateral_mu = 0.7
+peak_lon_slip_ratio = 0.12
+peak_lat_slip_angle_deg = 7.0
+lon_curve_sharpness = 1.6
+lat_curve_sharpness = 1.8
+optimal_load = 3800.0
+load_sensitivity = 0.4
+friction_circle_shape = 1.1
+combined_slip_falloff = 0.45
+relaxation_length = 0.18
+min_relaxation_speed = 1.0
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
+
+[sub_resource type="Resource" id="Resource_m2q8i"]
+script = ExtResource("2_m2q8i")
+peak_longitudinal_mu = 1.15
+peak_lateral_mu = 1.05
+sliding_longitudinal_mu = 0.75
+sliding_lateral_mu = 0.7
+peak_lon_slip_ratio = 0.12
+peak_lat_slip_angle_deg = 7.0
+lon_curve_sharpness = 1.6
+lat_curve_sharpness = 1.8
+optimal_load = 3800.0
+load_sensitivity = 0.4
+friction_circle_shape = 1.1
+combined_slip_falloff = 0.45
+relaxation_length = 0.18
+min_relaxation_speed = 1.0
+metadata/_custom_type_script = "uid://hgrcvwrnhy3a"
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_esffl"]
+size = Vector3(1.543, 1.07327, 4.48376)
+
+[node name="CarVolvo240Estate" instance=ExtResource("1_jnv4a")]
+mass = 1393.0
+center_of_mass = Vector3(0, 0.16, -0.07)
+
+[node name="DrivetrainController" parent="Components" index="2"]
+torque_curve = SubResource("Curve_jnv4a")
+engine_max_rpm = 6200.0
+gear_ratios = Array[float]([-3.71, 0.0, 4.03, 2.16, 1.37, 1.0, 0.83])
+upshift_rpm = 5800.0
+downshift_rpm = 2500.0
+clutch_torque_capacity = 250.0
+
+[node name="AeroController" parent="Components" index="3"]
+frontal_area = 2.05
+
+[node name="FrontAxle" parent="Axles" index="0"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.325)
+z_offset = -1.325
+track_width = 1.43
+brake_ratio = 0.7
+max_spring_length = 0.21
+spring_stiffness = 22000.0
+spring_bump_damping = 1350.0
+spring_rebound_damping = 3375.0
+ride_height_adjust = 0.1
+anti_roll_stiffness = 10000.0
+camber_angle_deg = -0.5
+caster_angle_deg = 3.5
+toe_angle_deg = 0.1
+wheel_radius = 0.309
+wheel_width = 0.185
+wheel_crr = 0.015
+tire_model = SubResource("Resource_xnbcl")
+
+[node name="WheelFL" parent="Axles/FrontAxle" index="0"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.715, 0, 0)
+
+[node name="CSGCylinder3D" parent="Axles/FrontAxle/WheelFL/Animation/Camber/Wheel" index="0"]
+radius = 0.309
+height = 0.185
+
+[node name="WheelFR" parent="Axles/FrontAxle" index="1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.715, 0, 0)
+
+[node name="CSGCylinder3D" parent="Axles/FrontAxle/WheelFR/Animation/Camber/Wheel" index="0"]
+radius = 0.309
+height = 0.185
+
+[node name="RearAxle" parent="Axles" index="1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.325)
+z_offset = 1.325
+track_width = 1.36
+brake_ratio = 0.3
+diff_ratio = 3.54
+max_spring_length = 0.21
+spring_stiffness = 28000.0
+spring_bump_damping = 1500.0
+spring_rebound_damping = 3800.0
+ride_height_adjust = 0.06
+anti_roll_stiffness = 0.0
+camber_angle_deg = 0.0
+toe_angle_deg = 0.05
+differential_type = 0
+wheel_radius = 0.309
+wheel_width = 0.185
+wheel_crr = 0.015
+tire_model = SubResource("Resource_m2q8i")
+
+[node name="WheelRL" parent="Axles/RearAxle" index="0"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.68, 0, 0)
+
+[node name="CSGCylinder3D" parent="Axles/RearAxle/WheelRL/Animation/Camber/Wheel" index="0"]
+radius = 0.309
+height = 0.185
+
+[node name="WheelRR" parent="Axles/RearAxle" index="1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.68, 0, 0)
+
+[node name="CSGCylinder3D" parent="Axles/RearAxle/WheelRR/Animation/Camber/Wheel" index="0"]
+radius = 0.309
+height = 0.185
+
+[node name="240_estate" parent="." index="5" instance=ExtResource("2_esffl")]
+transform = Transform3D(-1.49, 0, 2.24984e-07, 0, 1.49, 0, -2.24984e-07, 0, -1.49, 0, -0.46324, -2.28433)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." index="6"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.416611, 0.160355)
+shape = SubResource("BoxShape3D_esffl")
+
+[editable path="Axles/FrontAxle/WheelFL"]
+[editable path="Axles/FrontAxle/WheelFR"]
+[editable path="Axles/RearAxle/WheelRL"]
+[editable path="Axles/RearAxle/WheelRR"]

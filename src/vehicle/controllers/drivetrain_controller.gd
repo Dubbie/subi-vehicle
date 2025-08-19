@@ -105,6 +105,7 @@ var clutch_slip_rpm: float = 0.0
 var previous_clutch_torque: float = 0.0
 var clutch_locked_up: bool = false
 var lockup_hysteresis_timer: float = 0.0
+var corrective_torque: float = 0.0
 
 # Transmission state
 var current_gear_index: int = 1 # Start in neutral
@@ -536,6 +537,8 @@ func _get_diagnostics() -> Dictionary:
 		},
 		"clutch": {
 			"engagement_percent": clutch_engagement * 100.0,
+			"locked": clutch_locked_up,
+			"corrective_torque": corrective_torque,
 			"torque": clutch_torque,
 			"slip_rpm": clutch_slip_rpm,
 			"temperature": clutch_temperature,
@@ -609,7 +612,7 @@ func _calculate_clutch_torque(throttle_input: float, delta: float) -> float:
 		# This corrective torque acts like a powerful spring, snapping the speeds together.
 		# The stiffness is based on engine inertia to be stable.
 		var correction_stiffness = engine_inertia * 250.0
-		var corrective_torque = slip_velocity * correction_stiffness
+		corrective_torque = slip_velocity * correction_stiffness
 
 		# The final torque transmitted is the engine's contribution plus the correction.
 		target_clutch_torque = net_engine_torque + corrective_torque
