@@ -8,4 +8,5 @@ var surface_friction: float = 1.0
 var longitudinal_velocity: float = 0.0
 var wheel_angular_velocity: float = 0.0
 var wheel_radius: float = 0.0
+var stiction_factor: float = 1.0
 var delta: float = 0.0

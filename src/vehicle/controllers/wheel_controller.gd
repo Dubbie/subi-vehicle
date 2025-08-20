@@ -179,6 +179,7 @@ func debug_tire_forces(current_drive_torque: float):
 	model_params.longitudinal_velocity = contact_lon_velocity
 	model_params.wheel_angular_velocity = current_angular_velocity
 	model_params.wheel_radius = wheel_radius
+	model_params.stiction_factor = stiction_factor
 	model_params.delta = get_physics_process_delta_time()
 
 	var tire_forces = tire_model.calculate_forces(model_params)
@@ -206,12 +207,10 @@ func _update_spring_and_contact() -> void:
 	stiction_factor = 1.0
 	if has_contact and allow_stiction:
 		var wheel_surface_speed = abs(current_angular_velocity * wheel_radius)
-		# The threshold (5.0) is from the forum post, you can tune this.
 		if wheel_surface_speed < 5.0:
 			var delta = get_physics_process_delta_time()
 			var stict_window = 0.014 / delta if delta > 0 else 0.0
 			stiction_factor = min(stict_window * contact_velocity.length(), 1.0)
-			print("Stiction factor: %.2f" % stiction_factor)
 
 	if has_contact:
 		contact_point = get_collision_point()
@@ -274,6 +273,7 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 		model_params.longitudinal_velocity = contact_lon_velocity
 		model_params.wheel_angular_velocity = current_angular_velocity
 		model_params.wheel_radius = wheel_radius
+		model_params.stiction_factor = stiction_factor
 		model_params.delta = delta
 		tire_forces = tire_model.calculate_forces(model_params)
 
@@ -281,20 +281,41 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	local_force.x = tire_forces.x # Lateral Force (Fx)
 	local_force.z = tire_forces.y # Longitudinal Force (Fz)
 
-	# Apply stiction factor to tire forces
-	tire_forces *= stiction_factor
-
-	# Sum all torques acting on the wheel
-	# Traction torque from ground resistance
+	# Calculate torques from ground interaction (traction) and resistance.
+	# At a stop, traction_torque will be near-zero due to stiction.
 	var traction_torque = local_force.z * wheel_radius
+	var rolling_resistance_torque = crr * local_force.y
 
-	# Rolling resistance always opposes rotation
-	var rolling_resistance_force = crr * local_force.y
-	var rolling_resistance_torque = rolling_resistance_force * wheel_radius
+	# Calculate the final net torque acting on the wheel.
+	var net_torque = 0.0
 
-	# Net torque calculation
-	# Drive torque from engine, minus traction from ground, minus brakes and rolling resistance
-	var net_torque = drive_torque - traction_torque - (current_brake_torque * sign(current_angular_velocity)) - (rolling_resistance_torque * sign(current_angular_velocity))
+	# Brakes are on, and the wheel is spinning very slowly.
+	if current_brake_torque > 0.0 and abs(current_angular_velocity) < 2.0:
+		# Calculate the maximum "locking" torque the ground can provide.
+		# This is based on static friction, which is independent of the stiction model.
+		# We can approximate static friction as being slightly higher than peak dynamic friction.
+		var max_static_friction_force = local_force.y * tire_model.peak_longitudinal_mu * 1.25 # 1.25 is a static friction multiplier
+		var max_locking_torque = max_static_friction_force * wheel_radius
+
+		# All torques trying to spin the wheel FORWARD (drive) or BACKWARD (resistance).
+		var external_torques = drive_torque - traction_torque - (rolling_resistance_torque * sign(current_angular_velocity))
+
+		# The brake torque opposes the external torques.
+		var total_torque_before_lock = external_torques - (current_brake_torque * sign(current_angular_velocity))
+
+		# If the ground's locking torque is strong enough to resist the combined engine+brake torque...
+		if max_locking_torque > abs(total_torque_before_lock):
+			# ...then the wheel should be locked. We calculate the torque needed to bring its
+			# remaining angular velocity to zero in this single physics frame.
+			var inertia = 1.0 / inertia_inverse if inertia_inverse > 0.0 else 0.0
+			net_torque = (-current_angular_velocity * inertia) / delta
+		else:
+			# If the brake+engine torque is too strong (e.g., a burnout), the wheel still spins.
+			# Brakes are applied normally.
+			net_torque = total_torque_before_lock
+	else:
+		# Normal driving conditions
+		net_torque = drive_torque - traction_torque - (current_brake_torque * sign(current_angular_velocity)) - (rolling_resistance_torque * sign(current_angular_velocity))
 
 	# Apply net torque to update angular velocity
 	var angular_acceleration = net_torque * inertia_inverse

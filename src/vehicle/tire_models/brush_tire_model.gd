@@ -54,6 +54,7 @@ func calculate_forces(params: TireParams) -> Vector2:
 	var longitudinal_velocity = params.longitudinal_velocity
 	var wheel_angular_velocity = params.wheel_angular_velocity
 	var wheel_radius = params.wheel_radius
+	var stiction_factor = params.stiction_factor
 	var delta = params.delta
 
 	# Safety checks
@@ -90,6 +91,10 @@ func calculate_forces(params: TireParams) -> Vector2:
 	var limited_forces = _apply_friction_circle(target_lon_force, target_lat_force, max_available_grip)
 	target_lon_force = limited_forces.y
 	target_lat_force = limited_forces.x
+
+	# Update current forces with stiction factor
+	target_lon_force *= stiction_factor
+	target_lat_force *= stiction_factor
 
 	# Apply relaxation (transient behavior)
 	_apply_relaxation(longitudinal_velocity, wheel_angular_velocity, wheel_radius, delta)
