@@ -112,6 +112,24 @@ func _physics_process(delta: float):
 		if axle.left_wheel.has_contact or axle.right_wheel.has_contact:
 			grounded = true
 
+	# Stiction logic
+	var all_wheels_on_ground = true
+	for axle in axles:
+		if not axle.left_wheel.has_contact or not axle.right_wheel.has_contact:
+			all_wheels_on_ground = false
+			break # No need to check further
+
+	# Determine if brakes are active (using a small threshold).
+	var brakes_are_active = pedal_controller.get_brake() > 0.1 or pedal_controller.get_handbrake() > 0.1
+
+	# Combine conditions to get the final stiction state.
+	var should_allow_stiction = all_wheels_on_ground and brakes_are_active
+
+	# Pass this state to all wheels.
+	for axle in axles:
+		axle.left_wheel.allow_stiction = should_allow_stiction
+		axle.right_wheel.allow_stiction = should_allow_stiction
+
 	# Get wheel angular velocities for drivetrain
 	var wheel_angular_velocities = _get_driven_wheel_speeds()
 

@@ -54,6 +54,7 @@ center_of_mass = Vector3(0, 0.16, -0.07)
 
 [node name="SteeringController" parent="Components" index="1"]
 grip_limit_smoothing_rate = 2.0
+steering_assist_level = 0.3
 
 [node name="DrivetrainController" parent="Components" index="2"]
 torque_curve = SubResource("Curve_jnv4a")

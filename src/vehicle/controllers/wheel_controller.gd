@@ -51,6 +51,10 @@ var delta_rotation: float = 0.0
 var driven_wheel: bool = false
 ## The current steering angle
 var current_steer_angle: float = 0.0
+## Set by VehicleController, true if the car is trying to be stationary
+var allow_stiction: bool = false
+## Factor to reduce tire forces when car is stationary
+var stiction_factor: float = 1.0
 
 # Wheel basis vectors
 var knuckle_forward: Vector3 = Vector3.ZERO
@@ -199,6 +203,16 @@ func _update_spring_and_contact() -> void:
 	has_contact = is_colliding()
 	target_position.y = - (spring_max_travel + wheel_radius + droop_extension)
 
+	stiction_factor = 1.0
+	if has_contact and allow_stiction:
+		var wheel_surface_speed = abs(current_angular_velocity * wheel_radius)
+		# The threshold (5.0) is from the forum post, you can tune this.
+		if wheel_surface_speed < 5.0:
+			var delta = get_physics_process_delta_time()
+			var stict_window = 0.014 / delta if delta > 0 else 0.0
+			stiction_factor = min(stict_window * contact_velocity.length(), 1.0)
+			print("Stiction factor: %.2f" % stiction_factor)
+
 	if has_contact:
 		contact_point = get_collision_point()
 		contact_normal = get_collision_normal()
@@ -219,7 +233,11 @@ func _update_spring_and_contact() -> void:
 
 		var total_vertical_force: float = spring_force - damping_force + anti_roll_force
 
-		load_force_vector = total_vertical_force * contact_normal
+		var suspension_direction: Vector3 = contact_normal
+		if allow_stiction and stiction_factor < 1.0:
+			suspension_direction = Vector3.UP
+
+		load_force_vector = total_vertical_force * suspension_direction
 		local_force.y = total_vertical_force
 
 		last_spring_length = current_spring_length
@@ -262,6 +280,9 @@ func calculate_wheel_physics(current_drive_torque: float, current_brake_torque: 
 	# Store forces for later application to car body
 	local_force.x = tire_forces.x # Lateral Force (Fx)
 	local_force.z = tire_forces.y # Longitudinal Force (Fz)
+
+	# Apply stiction factor to tire forces
+	tire_forces *= stiction_factor
 
 	# Sum all torques acting on the wheel
 	# Traction torque from ground resistance
