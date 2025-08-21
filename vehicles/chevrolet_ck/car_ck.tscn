@@ -168,7 +168,6 @@ upshift_rpm = 4200.0
 downshift_rpm = 2000.0
 shift_delay = 0.4
 clutch_torque_capacity = 360.0
-auto_clutch_enabled = true
 
 [node name="AeroController" parent="Components" index="3"]
 frontal_area = 2.5

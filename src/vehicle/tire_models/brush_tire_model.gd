@@ -31,7 +31,7 @@ extends BaseTireModel
 ## Shape of friction circle (1.0 = perfect circle)
 @export var friction_circle_shape: float = 1.1
 ## How sharply lateral grip falls off with longitudinal slip.
-## 1.0 = linear (aggressive), 0.5 = curved (more controllable drifts)
+## 1.0 = linear (aggressive), 0.5 = curved (more controllable drDifts)
 @export var combined_slip_falloff: float = 0.3
 
 # Transient behavior - how quickly tire responds to slip changes

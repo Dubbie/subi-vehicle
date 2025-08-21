@@ -17,7 +17,7 @@ extends RigidBody3D
 ## The maximum steering angle in degrees.
 @export var max_steer_angle: float = 38.0
 ## Damping force applied to driven axles at very low speed to prevent oscillation.
-@export var low_speed_axle_damping: float = 25.0
+@export var low_speed_axle_damping: float = 50.0
 
 @export_group("Brakes")
 ## Maximum brake torque in Newton-meters.
@@ -216,20 +216,15 @@ func _apply_wheel_torques(delta: float) -> void:
 		if axle.drive_ratio > 0.0:
 			axle_drive_torque = current_drivetrain_torque * axle.diff_ratio
 
-		# --- NEW AXLE DAMPING LOGIC (THE FIX) ---
 		# At very low vehicle speeds, apply a damping force to the entire axle's
 		# drive torque *before* it gets to the differential.
-		var stiction_speed_threshold: float = 1.0 # m/s
-		if vehicle_speed < stiction_speed_threshold and axle.drive_ratio > 0.0:
-			# Get the average rotational speed of the axle
+		var damping_speed_threshold: float = 10.0
+		if vehicle_speed < damping_speed_threshold and axle.drive_ratio > 0.0 and not drivetrain_controller.clutch_locked_up:
 			var avg_axle_speed = (axle.left_wheel.current_angular_velocity + axle.right_wheel.current_angular_velocity) * 0.5
 
-			# Calculate a damping torque that opposes the average rotation
-			var axle_damping_torque = avg_axle_speed * low_speed_axle_damping
-
-			# Apply the damping directly to the axle's input torque
-			axle_drive_torque -= axle_damping_torque
-		# --- END OF NEW LOGIC ---
+			if pedal_controller.get_throttle() < 0.01:
+				var axle_damping_torque = avg_axle_speed * low_speed_axle_damping
+				axle_drive_torque -= axle_damping_torque
 
 		# Get the distributed drive torques from the axle's differential simulation
 		# This now receives the potentially damped torque, solving the feedback loop.

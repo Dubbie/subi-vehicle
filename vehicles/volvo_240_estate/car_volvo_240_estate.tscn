@@ -63,7 +63,6 @@ gear_ratios = Array[float]([-3.71, 0.0, 4.03, 2.16, 1.37, 1.0, 0.83])
 upshift_rpm = 5800.0
 downshift_rpm = 2500.0
 clutch_torque_capacity = 250.0
-auto_clutch_enabled = true
 
 [node name="AeroController" parent="Components" index="3"]
 frontal_area = 2.05
